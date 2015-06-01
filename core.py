@@ -6,10 +6,13 @@ import time
 
 class RemoteTorrent:
     """Record from seedbox 'info' command
-    uniquely defined by the name variable
+    uniquely defined by name and state
     Purpose is to represent a remote .torrent file and its connection info.
-    Remote suggests that we don't have access to the .torrent file.
+    The name 'Remote' suggests that we may not have access to the .torrent file.
+
+    RemoteTorrent instances are meant to be wrappers for parsed deluge-console records
     """
+    # names are unique identifiers
     def __eq__(self,other):
         return self.name == other.name
     def __hash__(self):
@@ -21,10 +24,12 @@ class RemoteTorrent:
         pass
     def __ne__(self,other):
         return self.name != other.name
+    # a non-zero state implies a successful query: that torrent is present on the remote server and data is parsed correctly
     def __nonzero__(self):
         return bool(self.state) and bool(self.name)
     def __repr__(self):
         return self.name
+    # defined for testing purposes
     def __reduce__(self):
         pass
     def __str__(self):
@@ -41,10 +46,14 @@ class RemoteTorrent:
 
 class LocalTorrent:
     """ Record constructed from a .torrent file
-    uniquely defined by the name variable
-    Purpose is to represent a .torrent file
-    Local suggests we have direct access to the .torrent file
+    Uniquely defined by both name and path variables.
+    Purpose is to represent a local .torrent file
+    The name 'Local' suggests we have direct access to the .torrent file,
+     but that we are uncertain of its state on the server
+
+    LocalTorrent instances are meant to be wrappers for parsed *.torrent files.
     """
+    # names and paths are both unique identifiers
     def __eq__(self,other):
         return self.name == other.name or self.path == other.path
     def __hash__(self):
@@ -56,31 +65,39 @@ class LocalTorrent:
         self.parse()
     def __ne__(self,other):
         return self.name != other.name and self.path != other.path
+    # nonzero name implies a successful bencode parse
+    # nonzero path is required to have an associated local file
     def __nonzero__(self):
         return bool(self.path) and bool(self.name)
+    # defined for testing purposes
     def __reduce__(self):
         pass
     def __repr__(self):
-        pass
+        return "<%s,%s>" %(self.name,self.path)
     def __str__(self):
         pass
+    # incomplete
     def parse(self):
         self.name = None
         self.size = None
         # parse things
+    # general matching based on passed 'func'
     def query(self,func,key):
         return key in self.__dict__ and func(self.__dict__[key])
     
-    # parse torrent bencode, extract useful information
-    # keep track of the .torrent file on disc: move, delete
-    # keep two separate (uncorrelated) lists of LocalTorrent, RemoteTorrent; 
-    #  we only need to correlate lists for one purpose, and this is easily done by checking for inclusion
 # TODO: Test error handling code
 class Shell:
     """ 
     Maintain a list of local shell and SSH commands in a queue 
     Evaluates and returns the returned output when directed 
-    Purpose is to manage input and output with shell and remote server efficiently
+    Purpose is to manage input and output with shell and remote server efficiently,
+     without requiring an individual ssh connection for each command.
+    
+    Usage is as follows
+    - enqueue commands using add_ssh or add_shell,
+      which includes both command, func, and arguments
+    - resolve the queue using do_ssh or do_shell, 
+      individually processing each command, and calling func(output,**args)
     """
     __connection_attempts = 5
     def __init__(self,uname,host):
@@ -172,6 +189,16 @@ class Record:
     Manages records, including creation, deletion, updating;
     asserts uniqueness for records, and ensures torrent files are validated
     Purpose is to keep a list of valid, up-to-date records on hand
+
+    Keeps two queues: one for LocalTorrents and one for RemoteTorrents
+    The order of each queue is maintained. Duplicates and zero-records 
+     (as defined above) are forbidden.
+
+    Supports add, del, find, and update operations for each of 
+     LocalTorrent (ltor) and RecordTorrent (rtor) queues
+     Operations may be called by object or name (and by path for LocalTorrents)
+    Since uniqueness is maintained, operations are always performed on any 
+     object present in the queue which is equal to the passed argument.
     """
     def __init__(self, shell):
         self.logger = logging.getLogger("Record")
@@ -257,8 +284,8 @@ class Record:
 
 class Seedbox:
     """
-    Manages the logic of upload and download queues and of 
-    where to upload and download file locations.
+    Manages the logic of upload/download queues for an individual seedbox
+     as well as upload and download file locations.
     """
     def __init__(self):
         self.logger = logging.getLogger("Seedbox")
