@@ -3,6 +3,7 @@ import subprocess
 import paramiko
 import select
 import time
+import re
 
 class RemoteTorrent:
     """Record from seedbox 'info' command
@@ -13,6 +14,21 @@ class RemoteTorrent:
     RemoteTorrent instances are meant to be wrappers for parsed deluge-console records
     """
     # names are unique identifiers
+    __record_pattern = ("Name: (?P<name>.+)\s*\n"
+              "ID: (?P<id>[0-9a-f]+)\s*\n"
+              "State: (?P<state>[\w]+)( Down Speed: (?P<dspeed>\d+)?/s)?( Up Speed: (?P<uspeed>\d+)/s)?( ETA: (?P<eta>[\d\w ]+))?\s*\n"
+              "(Seeds: (?P<cseed>\d+) \((?P<tseed>\d+)\) Peers: (?P<cpeer>\d+) \((?P<tpeer>\d+)\) Availability: (?P<avail>\d+\.\d+)\s*\n)?"
+			  "Size: (?P<csize>\d+)/(?P<tsize>\d+) Ratio: (?P<ratio>\d+\.\d+)\s*\n"
+              "Seed time: (?P<stime>\d+) Active: (?P<atime>\d+)\s*\n"
+              "Tracker status: (?P<tracker>[\w.]+): (?P<tracker_status>[\w ]+)\s*(\n)?"
+              "(Progress: (?P<progress>\d+\.\d+)\%)?")
+	
+    __size_pattern = r"(\d+\.\d+) ([KMGT])iB"
+    __time_pattern = r"(\d+) days (\d+):(\d+):(\d+)"
+    __size_dict = { 'K':1<<10, 'M':1<<20, 'G':1<<30, 'T':1<<40 }
+    __time_dict = { 'd':24*60*60, 'h':60*60, 'm':60, 's':1 }
+    __time_factor = [ 24*60*60, 60*60, 60, 1]
+
     def __eq__(self,other):
         return self.name == other.name
     def __hash__(self):
@@ -21,7 +37,6 @@ class RemoteTorrent:
         self.logger = logging.getLogger("RemoteTorrent")
         self.time = timestamp
         self.parse(info)
-        pass
     def __ne__(self,other):
         return self.name != other.name
     # a non-zero state implies a successful query: that torrent is present on the remote server and data is parsed correctly
@@ -34,12 +49,30 @@ class RemoteTorrent:
         pass
     def __str__(self):
         return self.name
+    @classmethod
+    def __size_convert(cls,matchobj):
+#        print matchobj.group(1),matchobj.group(2)
+        return str(int( float(matchobj.group(1)) * cls.__size_dict[matchobj.group(2)] ))
+    @classmethod
+    def __time_convert(cls,matchobj):
+		return str(sum( [i*j for i,j in zip( cls.__time_factor,[int(t) for t in matchobj.groups('0')] )]) )
     def parse(self,info):
-        self.name = info
-        self.size = None
+        # name/state will always be present
+        self.name = None
         self.state = None
-        # check both for matching and uniqueness when parsing
-        pass
+        # convert sizes to bytes, dates to seconds since epoch
+        info = re.sub(self.__size_pattern, self.__size_convert, info)
+        info = re.sub(self.__time_pattern, self.__time_convert, info)
+        matchobj = re.search(self.__record_pattern,info)
+        info_dict = matchobj.groupdict()
+        for key in info_dict:
+            try:
+                info_dict[key] = float(info_dict[key])
+            except (TypeError,ValueError):
+                pass
+        if 'ratio' in info_dict and 'atime' in info_dict and info_dict['atime'] > 0:
+            info_dict['score'] = 10**6*info_dict['ratio']/info_dict['atime']
+        self.__dict__.update(info_dict)
     def query(self,func,key):
         return key in self.__dict__ and func(self.__dict__[key])
         pass
