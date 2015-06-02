@@ -28,7 +28,7 @@ class RemoteTorrent:
     __size_dict = { 'K':1<<10, 'M':1<<20, 'G':1<<30, 'T':1<<40 }
     __time_dict = { 'd':24*60*60, 'h':60*60, 'm':60, 's':1 }
     __time_factor = [ 24*60*60, 60*60, 60, 1]
-
+    __state_list = ['Active','Allocating','Checking','Downloading','Error','Paused','Seeding','Queued']
     def __eq__(self,other):
         return self.name == other.name
     def __hash__(self):
@@ -64,16 +64,19 @@ class RemoteTorrent:
         info = re.sub(self.__size_pattern, self.__size_convert, info)
         info = re.sub(self.__time_pattern, self.__time_convert, info)
         matchobj = re.search(self.__record_pattern,info)
-        info_dict = matchobj.groupdict()
-        for key in info_dict:
-            try:
-                info_dict[key] = float(info_dict[key])
-            except (TypeError,ValueError):
-                pass
-        if 'ratio' in info_dict and 'atime' in info_dict and info_dict['atime'] > 0:
-            info_dict['score'] = 10**6*info_dict['ratio']/info_dict['atime']
-        self.__dict__.update(info_dict)
-    def query(self,func,key):
+        if matchobj:
+            info_dict = matchobj.groupdict()
+            for key in info_dict:
+                try:
+                    info_dict[key] = float(info_dict[key])
+                except (TypeError,ValueError):
+                    pass
+            if info_dict['atime'] > 0:
+                info_dict['score'] = 10**6*info_dict['ratio']/info_dict['atime']
+            if info_dict['state'] not in self.__state_list:
+                info_dict['state'] = None
+            self.__dict__.update(info_dict)
+    def query(self,key,func):
         return key in self.__dict__ and func(self.__dict__[key])
         pass
 
