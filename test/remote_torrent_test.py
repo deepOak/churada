@@ -13,16 +13,16 @@ import logging
 # e.g. paused, error
 
 
-info_seeding = """Name: Steven.Universe.S01.720p.WEB-DL.AAC2.0.H.264-RainbowCrash
-ID: 484d0948198cedc854d69091ae48f7502a54b7f1
+info_seeding = """Name: torrent_name
+ID: abcdef1234567890
 State: Seeding Up Speed: 44.9 KiB/s
 Seeds: 0 (86) Peers: 1 (6) Availability: 0.00
 Size: 14.4 GiB/14.4 GiB Ratio: 3.237
 Seed time: 67 days 15:44:47 Active: 67 days 16:09:22
-Tracker status: landof.tv: Announce OK"""
+Tracker status: tracker.ca: Announce OK"""
 
-dict_seeding = {'name':"Steven.Universe.S01.720p.WEB-DL.AAC2.0.H.264-RainbowCrash",
-                'id':"484d0948198cedc854d69091ae48f7502a54b7f1",
+dict_seeding = {'name':"torrent_name",
+                'id':"abcdef1234567890",
                 'state':'Seeding',
                 'dspeed':None,
                 'uspeed':float(45977),
@@ -37,20 +37,20 @@ dict_seeding = {'name':"Steven.Universe.S01.720p.WEB-DL.AAC2.0.H.264-RainbowCras
                 'ratio':float(3.237),
                 'stime':float(5845487),
                 'atime':float(5846962),
-                'tracker':'landof.tv',
+                'tracker':'tracker.ca',
                 'tracker_status':"Announce OK",
                 'progress':None,
                 'score':(3.237)/(5.846962)}
 
-info_paused = """Name: Steven.Universe.S01.720p.WEB-DL.AAC2.0.H.264-RainbowCrash
-ID: 484d0948198cedc854d69091ae48f7502a54b7f1
+info_paused = """Name: torrent_name
+ID: abcdef1234567890
 State: Paused
 Size: 14.4 GiB/14.4 GiB Ratio: 3.237
 Seed time: 67 days 15:44:47 Active: 67 days 16:09:22
-Tracker status: landof.tv: Announce OK"""
+Tracker status: tracker.ca: Announce OK"""
 
-dict_paused = {'name':"Steven.Universe.S01.720p.WEB-DL.AAC2.0.H.264-RainbowCrash",
-               'id':"484d0948198cedc854d69091ae48f7502a54b7f1",
+dict_paused = {'name':"torrent_name",
+               'id':"abcdef1234567890",
                'state':'Paused',
                'dspeed':None,
                'uspeed':None,
@@ -65,20 +65,20 @@ dict_paused = {'name':"Steven.Universe.S01.720p.WEB-DL.AAC2.0.H.264-RainbowCrash
                'ratio':float(3.237),
                'stime':float(5845487),
                'atime':float(5846962),
-               'tracker':'landof.tv',
+               'tracker':'tracker.ca',
                'tracker_status':"Announce OK",
                'progress':None,
                'score':(3.237)/(5.846962)}
 
-info_checking = """Name: Steven.Universe.S01.720p.WEB-DL.AAC2.0.H.264-RainbowCrash
-ID: 484d0948198cedc854d69091ae48f7502a54b7f1
+info_checking = """Name: torrent_name
+ID: abcdef1234567890
 State: Checking
 Size: 6.4 GiB/14.4 GiB Ratio: 3.237
 Seed time: 67 days 15:44:47 Active: 67 days 16:09:22
-Tracker status: landof.tv: Announce OK"""
+Tracker status: tracker.ca: Announce OK"""
 
-dict_checking = {'name':"Steven.Universe.S01.720p.WEB-DL.AAC2.0.H.264-RainbowCrash",
-                 'id':"484d0948198cedc854d69091ae48f7502a54b7f1",
+dict_checking = {'name':"torrent_name",
+                 'id':"abcdef1234567890",
                  'state':'Checking',
                  'dspeed':None,
                  'uspeed':None,
@@ -93,20 +93,20 @@ dict_checking = {'name':"Steven.Universe.S01.720p.WEB-DL.AAC2.0.H.264-RainbowCra
                  'ratio':float(3.237),
                  'stime':float(5845487),
                  'atime':float(5846962),
-                 'tracker':'landof.tv',
+                 'tracker':'tracker.ca',
                  'tracker_status':"Announce OK",
                  'progress':None,
                  'score':(3.237)/(5.846962)}
 
-info_error = """Name: Steven.Universe.S01.720p.WEB-DL.AAC2.0.H.264-RainbowCrash
-ID: 484d0948198cedc854d69091ae48f7502a54b7f1
+info_error = """Name: torrent_name
+ID: abcdef1234567890
 State: Error
 Size: 6.4 GiB/14.4 GiB Ratio: 3.237
 Seed time: 67 days 15:44:47 Active: 67 days 16:09:22
-Tracker status: landof.tv: Announce OK"""
+Tracker status: tracker.ca: Announce OK"""
 
-dict_error = {'name':"Steven.Universe.S01.720p.WEB-DL.AAC2.0.H.264-RainbowCrash",
-              'id':"484d0948198cedc854d69091ae48f7502a54b7f1",
+dict_error = {'name':"torrent_name",
+              'id':"abcdef1234567890",
               'state':'Error',
               'dspeed':None,
               'uspeed':None,
@@ -121,22 +121,22 @@ dict_error = {'name':"Steven.Universe.S01.720p.WEB-DL.AAC2.0.H.264-RainbowCrash"
               'ratio':float(3.237),
               'stime':float(5845487),
               'atime':float(5846962),
-              'tracker':'landof.tv',
+              'tracker':'tracker.ca',
               'tracker_status':"Announce OK",
               'progress':None,
               'score':(3.237)/(5.846962)}
 
-info_downloading = """Name: Steven.Universe.S01.720p.WEB-DL.AAC2.0.H.264-RainbowCrash
-ID: 484d0948198cedc854d69091ae48f7502a54b7f1
+info_downloading = """Name: torrent_name
+ID: abcdef1234567890
 State: Downloading Down Speed: 16.8 MiB/s Up Speed: 44.9 KiB/s
 Seeds: 13 (86) Peers: 1 (6) Availability: 21.33
 Size: 6.4 GiB/14.4 GiB Ratio: 3.237
 Seed time: 0 days 00:00:00 Active: 67 days 16:09:22
-Tracker status: landof.tv: Announce OK
+Tracker status: tracker.ca: Announce OK
 Progress: 44.4% [#####~~~~]"""
 
-dict_downloading = {'name':"Steven.Universe.S01.720p.WEB-DL.AAC2.0.H.264-RainbowCrash",
-                    'id':"484d0948198cedc854d69091ae48f7502a54b7f1",
+dict_downloading = {'name':"torrent_name",
+                    'id':"abcdef1234567890",
                     'state':'Downloading',
                     'dspeed':float(17616076),
                     'uspeed':float(45977),
@@ -151,35 +151,33 @@ dict_downloading = {'name':"Steven.Universe.S01.720p.WEB-DL.AAC2.0.H.264-Rainbow
                     'ratio':float(3.237),
                     'stime':float(0),
                     'atime':float(5846962),
-                    'tracker':'landof.tv',
+                    'tracker':'tracker.ca',
                     'tracker_status':"Announce OK",
                     'progress':float(44.4),
                     'score':(3.237)/(5.846962)}
 
 
 info_unique_title = """Name: unique_title
-ID: 484d0948198cedc854d69091ae48f7502a54b7f1
+ID: abcdef1234567890
 State: Downloading Down Speed: 16.8 MiB/s Up Speed: 44.9 KiB/s
 Seeds: 13 (86) Peers: 1 (6) Availability: 21.33
 Size: 6.4 GiB/14.4 GiB Ratio: 3.237
 Seed time: 0 days 00:00:00 Active: 67 days 16:09:22
-Tracker status: landof.tv: Announce OK
+Tracker status: tracker.ca: Announce OK
 Progress: 44.4% [#####~~~~]"""
 
 info_bad_state = """Name: x
-ID: 484d0948198cedc854d69091ae48f7502a54b7f1
+ID: abcdef1234567890
 State: x Down Speed: 16.8 MiB/s Up Speed: 44.9 KiB/s
 Seeds: 13 (86) Peers: 1 (6) Availability: 21.33
 Size: 6.4 GiB/14.4 GiB Ratio: 3.237
 Seed time: 0 days 00:00:00 Active: 67 days 16:09:22
-Tracker status: landof.tv: Announce OK
+Tracker status: tracker.ca: Announce OK
 Progress: 44.4% [#####~~~~]"""
 
 timestamp = 42
 
 class RemoteTorrentTest(unittest.TestCase):
-    def setUp(self):
-        pass
     @parameterized.expand(
        [("seeding",[info_seeding,timestamp],dict_seeding),
         ("paused",[info_paused,timestamp],dict_paused),
@@ -229,9 +227,10 @@ class RemoteTorrentTest(unittest.TestCase):
     @parameterized.expand(
       [("lambda_1",info_downloading,{'key':'tpeer','func':lambda x: x > 3},True),
        ("lambda_2",info_downloading,{'key':'tpeer','func':lambda x: x < 3},False),
-       ("lambda_3",info_downloading,{'key':'tracker','func':lambda x: x == 'landof.tv'},True),
-       ("regex_1",info_downloading,{'key':'tracker','func':lambda x: bool(re.search('landof',x))},True),
-       ("regex_2",info_downloading,{'key':'tracker','func':lambda x: bool(re.search('tv',x))},True)  ]
+       ("lambda_3",info_downloading,{'key':'tracker','func':lambda x: x == 'tracker.ca'},True),
+       ("regex_1",info_downloading,{'key':'tracker','func':lambda x: bool(re.search('tracker',x))},True),
+       ("regex_2",info_downloading,{'key':'tracker','func':lambda x: bool(re.search('ca',x))},True),
+       ("regex_3",info_downloading,{'key':'tracker','func':lambda x: bool(re.search('what',x))},False)]
        )
     def query_test(self,_,info,func_args,query_flag):
         rtor = RemoteTorrent(info,timestamp)
