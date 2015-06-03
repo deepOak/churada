@@ -133,11 +133,13 @@ class RecordTest(unittest.TestCase):
         ("arg_priority_3",ltor_test,{'ltor':ltor_test[1],'path':'3'},{'name':'upd_name','path':'upd_path'},1,True,False),
         ("arg_priority_4",ltor_test,{'name':'2','path':'3'},{'name':'upd_name','path':'upd_path'},2,True,False)]
        )
-    def ltor_update_test(self,_,control,func_args,upd_args,index,upd_flag,del_flag):
+    @patch('churada.core.LocalTorrent')
+    def ltor_update_test(self,_,control,func_args,upd_args,index,upd_flag,del_flag,mock_ltor):
+        mock_ltor.return_value = ltor_gen(**upd_args)
         control = deepcopy(control)
         self.record.record_local = deepcopy(control)
         for ltor in self.record.record_local:
-            ltor.parse.side_effect = mock_ltor_lambda(ltor,upd_args)
+            ltor._LocalTorrent__parse.side_effect = mock_ltor_lambda(ltor,upd_args)
         if del_flag:
             del control[index]
         if upd_flag:

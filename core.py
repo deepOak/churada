@@ -36,7 +36,7 @@ class RemoteTorrent:
     def __init__(self,info,timestamp):
         self.logger = logging.getLogger("RemoteTorrent")
         self.time = timestamp
-        self.parse(info)
+        self.__parse(info)
     def __ne__(self,other):
         return self.name != other.name
     # a non-zero state implies a successful query: that torrent is present on the remote server and data is parsed correctly
@@ -51,12 +51,11 @@ class RemoteTorrent:
         return self.name
     @classmethod
     def __size_convert(cls,matchobj):
-#        print matchobj.group(1),matchobj.group(2)
         return str(int( float(matchobj.group(1)) * cls.__size_dict[matchobj.group(2)] ))
     @classmethod
     def __time_convert(cls,matchobj):
 		return str(sum( [i*j for i,j in zip( cls.__time_factor,[int(t) for t in matchobj.groups('0')] )]) )
-    def parse(self,info):
+    def __parse(self,info):
         # name/state will always be present
         self.name = None
         self.state = None
@@ -94,11 +93,11 @@ class LocalTorrent:
         return self.name == other.name or self.path == other.path
     def __hash__(self):
         return hash(self.name)
-    def __init__(self,path,timestamp):
+    def __init__(self,path):
         self.logger = logging.getLogger("LocalTorrent")
-        self.time = timestamp
+        self.time = time.time()
         self.path = path
-        self.parse()
+        self.__parse()
     def __ne__(self,other):
         return self.name != other.name and self.path != other.path
     # nonzero name implies a successful bencode parse
@@ -112,12 +111,68 @@ class LocalTorrent:
         return "<%s,%s>" %(self.name,self.path)
     def __str__(self):
         pass
-    # incomplete
-    def parse(self):
+    # tokenize and parse_bencode both from Fredrik Lundh:
+    # August 2007 (effbot.org/zone/bencode.htm)
+    @classmethod
+    def tokenize(cls,bencode):
+        i = 0
+        match = re.compile("([deil])|(\d+):|(-?\d+)").match
+        while i < len(bencode):
+            m = match(bencode,i)
+            s = m.group(m.lastindex)
+            i = m.end()
+            if m.lastindex == 2:
+                yield "s"
+                yield bencode[i:i+int(s)]
+                i = i + int(s)
+            else:
+                yield s
+    @classmethod
+    def parse_bencode(cls,next_token,token):
+        if token == 'i':
+            data = int(next_token())
+            if next_token() != 'e':
+                raise ValueError
+        elif token == 's':
+            data = next_token()
+        elif token == 'd' or token == 'l':
+            data = []
+            tok = next_token()
+            while tok != "e":
+                data.append(cls.parse_bencode(next_token,tok))
+                tok = next_token()
+            if token == "d":
+                data = dict(zip(data[0::2],data[1::2]))
+        else:
+            raise ValueError
+        return data
+    def __parse(self):
         self.name = None
         self.size = None
-        # parse things
-    # general matching based on passed 'func'
+        with open(self.path,'r') as tfile:
+            bencode = tfile.read()
+        try:
+            src = self.tokenize(bencode)
+            tfile_dict = self.parse_bencode(src.next,src.next())
+            for token in src:
+                # log error
+                raise SyntaxError("trailing bencode")
+        except (AttributeError,ValueError,StopIteration),e:
+            # log error
+            return
+            
+        info = tfile_dict['info']
+        del tfile_dict['info']
+        if 'pieces' in info:
+            del info['pieces']
+        tfile_dict.update(info)
+        if 'files' in info:
+            self.size = 0
+            for fdict in info['files']:
+                self.size += fdict['length'] 
+        else:
+            self.size = tfile_dict['length']
+        self.__dict__.update(tfile_dict)
     def query(self,func,key):
         return key in self.__dict__ and func(self.__dict__[key])
     
@@ -262,7 +317,7 @@ class Record:
             else:
                 self.record_local.append(ltor)
         elif path:
-            ltor = LocalTorrent(path,time.time())
+            ltor = LocalTorrent(path)
             self.ltor_add(pos=pos,ltor=ltor)
     # ltor > name > path
     def ltor_del(self,ltor=None,name=None,path=None):
@@ -288,8 +343,8 @@ class Record:
         if result:
             index = self.record_local.index(result)
             self.ltor_del(ltor=result)
-            result.parse()
-            self.ltor_add(ltor=result,pos=index)
+            ltor_new = LocalTorrent(result.path)
+            self.ltor_add(ltor=ltor_new,pos=index)
     # rtor > name
     def rtor_add(self,rtor=None,name=None,pos=None):
         if rtor and rtor not in self.record_remote:
