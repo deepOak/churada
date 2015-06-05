@@ -4,6 +4,7 @@ import paramiko
 import select
 import time
 import re
+from copy import copy
 
 class RemoteTorrent:
     """Record from seedbox 'info' command
@@ -75,6 +76,14 @@ class RemoteTorrent:
             if info_dict['state'] not in self.__state_list:
                 info_dict['state'] = None
             self.__dict__.update(info_dict)
+    @classmethod
+    def batch_parse(cls,info,timestamp):
+        info = re.sub(cls.__size_pattern, cls.__size_convert, info)
+        info = re.sub(cls.__time_pattern, cls.__time_convert, info)   
+        info_iter = re.finditer(cls.__record_pattern,info)
+        batch = [RemoteTorrent(match.group(),timestamp) for match in info_iter]
+        batch.sort(key=lambda rtor: rtor.score)
+        return batch
     def query(self,key,func):
         return key in self.__dict__ and func(self.__dict__[key])
         pass
@@ -163,8 +172,7 @@ class LocalTorrent:
             
         info = tfile_dict['info']
         del tfile_dict['info']
-        if 'pieces' in info:
-            del info['pieces']
+        del info['pieces']
         tfile_dict.update(info)
         if 'files' in info:
             self.size = 0
@@ -222,9 +230,15 @@ class Shell:
             self.__client.close()
             self.__client = None
     def __shell_command(self,command):
+        command = re.split(" ",command)
         self.logger.debug("Command: (%s) %s",self,command)
-        output = subprocess.check_output(command)
-        return output
+        try:
+            output = subprocess.check_output(command)
+            exitcode = 0
+        except (subprocess.CalledProcessError) as e:
+            output = e.output
+            exitcode = e.returncode
+        return (exitcode,output)
     def __ssh_command(self,command):
         self.logger.debug("Command: (%s) %s",self,command)
         stdin,stdout,stderr = self.__client.exec_command(command)
@@ -237,7 +251,8 @@ class Shell:
                     while part:
                         output += part
                         part = stdout.channel.recv(1024)
-        return output
+        exitcode = stdout.channel.recv_exit_status()
+        return (exitcode,output)
     def add_ssh(self,command,func,args):
         self.ssh_queue.append( (command,func,args) )
     def add_shell(self,command,func,args):
@@ -249,13 +264,14 @@ class Shell:
         self.__connect()
         if self.__client:
             for command,func,args in self.ssh_queue:
-                output = None
+                data = None
                 try:
-                    output = self.__ssh_command(command)
+                    exitcode,output = self.__ssh_command(command)
                 except (paramiko.ssh_exception.SSHException) as e:
                     self.logger.warning(e)
-                if output is not None:
-                    func(data=output,**args)
+                args['exitcode'] = exitcode
+                args['output'] = output
+                func(**args) #,data=output)
             self.__disconnect()
             self.ssh_queue = []
         self.__doing_ssh = False
@@ -266,16 +282,17 @@ class Shell:
             return
         self.__processing_shell = True
         for command,func,args in self.shell_queue:
-            output = None
+            data = None
             try:
-                output = self.__shell_command(command)
-            except (subprocess.CalledProcessError,OSError) as e:
+                exitcode,output = self.__shell_command(command)
+            except OSError as e:
                 self.logger.warning(e)
-            if output is not None:
-                func(data=output,**args)
+            args['exitcode'] = exitcode
+            args['output'] = output
+            func(**args) #data = output
         self.shell_queue = []
         self.__doing_shell = False
-class Record:
+class LocalRecord:
     """
     Manages records, including creation, deletion, updating;
     asserts uniqueness for records, and ensures torrent files are validated
@@ -293,36 +310,30 @@ class Record:
     """
     def __init__(self, shell):
         self.logger = logging.getLogger("Record")
-        self.record_remote = []
-        self.record_local = []
+        self.record = []
         self.shell = shell
-        self.info_cmd = "deluge-console \"connect 127.0.0.1:33307; info %s\""
+    def __nonzero__(self):
+        return bool(self.record)
+    def __iter__(self):
+        return iter(copy(self.record))
     def __repr__(self):
         pass
     def __str__(self):
         pass
-    # helper function for seedbox_manager
-    def __rtor_add(self,data,pos=None):
-        rtor = RemoteTorrent(time.time(),data)
-        if rtor not in self.record_remote:
-            if pos:
-                self.record_remote.insert(pos,rtor)
-            else:
-                self.record_remote.append(rtor)
     # ltor > path
     def ltor_add(self,ltor=None,path=None,pos=None):
-        if ltor and ltor not in self.record_local:
-            if pos and pos in range(0,len(self.record_local)+1):
-                self.record_local.insert(pos,ltor)
+        if ltor and ltor not in self.record:
+            if pos and pos in range(0,len(self.record)+1):
+                self.record.insert(pos,ltor)
             else:
-                self.record_local.append(ltor)
+                self.record.append(ltor)
         elif path:
             ltor = LocalTorrent(path)
             self.ltor_add(pos=pos,ltor=ltor)
     # ltor > name > path
     def ltor_del(self,ltor=None,name=None,path=None):
-        if ltor and ltor in self.record_local:
-            self.record_local.remove(ltor)
+        if ltor and ltor in self.record:
+            self.record.remove(ltor)
         elif name:
             self.ltor_del(ltor=self.ltor_find(name=name))
         elif path:
@@ -331,88 +342,222 @@ class Record:
     def ltor_find(self,ltor=None,name=None,path=None):
         result = None
         if ltor:
-            result = next((e for e in self.record_local if e == ltor),None)
+            result = next((e for e in self.record if e == ltor),None)
         elif name:
-            result = next((e for e in self.record_local if e.name == name),None)
+            result = next((e for e in self.record if e.name == name),None)
         elif path:
-            result = next((e for e in self.record_local if e.path == path),None)
+            result = next((e for e in self.record if e.path == path),None)
         return result
     # ltor > name > path
     def ltor_update(self,ltor=None,name=None,path=None):
         result = self.ltor_find(ltor=ltor,name=name,path=path)
         if result:
-            index = self.record_local.index(result)
+            index = self.record.index(result)
             self.ltor_del(ltor=result)
             ltor_new = LocalTorrent(result.path)
             self.ltor_add(ltor=ltor_new,pos=index)
+
+class RemoteRecord:
+    def __init__(self,shell):
+        self.logger = logging.getLogger("RemoteRecord")
+        self.record = []
+        self.shell = shell
+        self.info_cmd = "deluge-console \"connect 127.0.0.1:33307; info %s\""
+    def __iter__(self):
+        return iter(copy(self.record))
+    def __repr__(self):
+        pass
+    def __str__(self):
+        pass
+    # helper function for seedbox_manager
+    def __rtor_add(self,data,pos=None):
+        rtor = RemoteTorrent(time.time(),data)
+        if rtor not in self.record:
+            if pos:
+                self.record.insert(pos,rtor)
+            else:
+                self.record.append(rtor)
     # rtor > name
     def rtor_add(self,rtor=None,name=None,pos=None):
-        if rtor and rtor not in self.record_remote:
-            self.record_remote.append(rtor)
+        if rtor and rtor not in self.record:
+            self.record.append(rtor)
         elif name:
             command = self.info_cmd %(name)
             func = self.__rtor_add
             self.shell.add_ssh(command,func,{'pos':pos})
     # rtor > name
     def rtor_del(self,rtor=None,name=None):
-        if rtor and rtor in self.record_remote:
-            self.record_remote.remove(rtor)
+        if rtor and rtor in self.record:
+            self.record.remove(rtor)
         elif name:
             self.rtor_del(rtor=self.rtor_find(name=name))
     def rtor_find(self,rtor=None,name=None):
         result = None
         if rtor:
-            result = next((e for e in self.record_remote if e == rtor),None)
+            result = next((e for e in self.record if e == rtor),None)
         elif name:
-            result = next((e for e in self.record_remote if e.name == name),None)
+            result = next((e for e in self.record if e.name == name),None)
         return result
     def rtor_update(self,rtor=None,name=None):
         result = self.rtor_find(rtor=rtor,name=name)
         if result:
-            index = self.record_remote.index(result)
+            index = self.record.index(result)
             self.rtor_del(rtor=result)
             self.rtor_add(name=result.name,pos=index)
+
 
 class Seedbox:
     """
     Manages the logic of upload/download queues for an individual seedbox
      as well as upload and download file locations.
+     - capacity: represents the capacity
+     - up_queue - LocalRecord representing a queue of files to upload. Populated externally.
+     - down_queue - RemoteRecord representing a queue of files to download. Populated individually after each successful upload
+     - record - RemoteRecord representing the entirety of torrent files present on a server.
+      - used to ensure unique uploads and to process deletions
+     
+     - rules are a tuple of the form (key,func) for use in query functions
+     - r_download_valid - list of rules that determine if a download is valid
+     - r_download_path - list of rules that determine where to download a path.
+      - elements are triples of the form (rule,path,priority)
+      - sorted by priority; first match is used
+     - r_delete_valid - list of rules that determine if a deletion is valid
     """
-    def __init__(self):
+    __upload_command = "rsync -n %s %s"
+    __download_command = "rsync -rn %s %s"
+    __delete_command = "deluge-console \"connect 127.0.0.1:33307; info %s\"" # rm --remove_data %s
+    __size_command = "du -block-size=1 -s ~/"
+    __info_command = "deluge-console \"connect 127.0.0.1:33307; info\""
+    # NOTE: must assign local path when appending things to download queue
+    def __init__(self,uname,host,capacity,paths,rules):
+        self.shell = Shell(uname,host)
+        self.up_queue = LocalRecord(self.shell)
+        self.down_queue = RemoteRecord(self.shell)
+        self.info = RemoteRecord(self.shell)
+
+        self.path_remote_torrent = paths[0]
+        self.path_remote_data = paths[1]
+        self.path_local_data = paths[2]
+        
+        self.capacity = capacity
+
+        self.r_download_valid = rules[0]
+        self.r_download_path = rules[1]
+        self.r_delete_valid = rules[2]
+        
         self.logger = logging.getLogger("Seedbox")
-#        self.shell = Shell()
-#        self.uqueue = Record(
-        pass
-    def __repr__(self):
-        pass
+
     def __str__(self):
         pass
-    # dfunc, ufunc describe what to do with the output returned by the shell manager
-    # 0) call shell to get the file record ->
-    # 1)  ensure the file/record still exists
-    # 2)  validate the file/record by arbitrary test (size, matching)
-    # 3) call shell to perform the action (upload, download, deletion)
-    # 4)  cleanup queues (call del_uqueue, etc.)
-    def __delete(self):
-        pass
-    def __download(self):
-        pass
-    def __upload(self):
-        pass
 
-    def uqueue_add(self,ltor):
+    def __check_composite_rule(self,rule_list,rtor):
+        for rule in rule_list:
+            if not rtor_query(*rule):
+                return False
+        return True
+
+    def __check_download_valid(self,rtor):
+        for rule_list in self.r_download_valid:
+            if not self.__check_composite_rule(rule_list,rtor):
+                return False
+        return True
+
+    def __check_download_path(self,rtor):
+        for rule_list,download_path,priority in self.r_download_path:
+            if not self.__check_composite_rule(rule_list,rtor):
+                return download_path
+        return self.path_remote_data
+
+    def __check_delete_valid(self,rtor):
+        for rule_list in self.r_delete_valid:
+            if not self.__check_composite_rule(rule_list,rtor):
+                return False
+        return True
+
+    def __size(self,exitcode,output):
+        if exitcode == 0:
+            match = re.match("\d+",output)
+            self.size = int(match.group())
+
+    def __update(self,exitcode,output):
+        if exitcode == 0:
+            rtor_list = RemoteTorrent.batch_parse(output,time.time())
+            self.info = RemoteRecord(self.shell)
+            for rtor in rtor_list:
+                self.info.add_rtor(rtor=rtor)
+    def delete(self,space,rtor_iter=None,rtor=None,exitcode=None,output=None):
+        if not rtor_iter:
+            rtor_iter = iter(self.info)
+        if rtor and exitcode == 0: # successful delete
+            space -= rtor.size
+            self.down_queue.rtor_del(rtor=rtor)
+        if space <= 0: # done with deleting
+            return
+        try:
+            rtor = rtor_iter.next()
+            while not self.__check_delete_valid(rtor):
+                rtor = rtor_iter.next()
+        except StopIteration:
+            return
+        command = self.__delete_command %(rtor.name)
+        func = self.delete
+        args = {'rtor':rtor,'rtor_iter':rtor_iter,'space':space}
+        self.shell.add_ssh(command,func,args)
+
+    def download(self,space,rtor_iter=None,rtor=None,exitcode=None,output=None):
+        if not rtor_iter:
+            rtor_iter = iter(self.down_queue)
+        # check to see if the previous download was successful
+        if rtor and exitcode == 0:
+            space -= rtor.size
+            self.down_queue.rtor_del(rtor=rtor)
+        if space <= 0:
+            return
+        try:
+            rtor = rtor_iter.next()
+            while not self.__check_download_valid(rtor):
+                rtor = rtor_iter.next()
+        except StopIteration:
+            return
+        # if we have enough space, download
+        if rtor.size <= space:
+            download_path = self.__check_download_path(rtor)
+            command = self.__download_command %(self.path_remote_data,download_path)
+            func = self.download
+            args = {'rtor':rtor,'rtor_iter':rtor_iter,'space':space}
+            self.shell.add_shell(command,func,args)
+        # otherwise, move on 
+        else:
+            self.download(space,rtor_iter=rtor_iter)
+
+    def enqueue(self):
         pass
-    def uqueue_del(self,ltor):
-        pass
-    def uqueue_do(self,max_data = 0):
-        pass
-    def uqueue_populate(self):
-        pass
-    def dqueue_add(self,rtor):
-        pass
-    def dqueue_del(self,rtor):
-        pass
-    def dqueue_do(self,max_data = 0):
-        pass
-    def record_populate(self):
-        pass
+        # enqueue an ltor into the upload queue
+
+    def update(self):
+        self.shell.add_ssh(self.__info_command,self.__update,{})
+        self.shell.add_ssh(self.__size_command,self.__size,{})
+
+    def upload(self,space,ltor_iter=None,ltor=None,exitcode=None,output=None):
+        if not ltor_iter:
+            ltor_iter = iter(self.up_queue)
+        # successful upload
+        if ltor and exitcode == 0:
+            space -= ltor.size
+            self.down_queue.rtor_add(name=ltor.name)
+            self.up_queue.ltor_del(ltor=ltor)
+        try:
+            ltor = ltor_iter.next()
+        except StopIteration:
+            return
+        # if we have enough space, upload
+        if ltor.size <= space:
+            command = self.__upload_command %(ltor.path,self.path_remote_torrent)
+            func = self.upload
+            args = {'ltor':ltor,'ltor_iter':ltor_iter,'space':space}
+            self.shell.add_shell(command,func,args)
+        # otherwise, move on to the next item 
+        else:
+            self.upload(space,ltor_iter=ltor_iter)
+
+
