@@ -5,6 +5,10 @@ import select
 import time
 import re
 from copy import copy
+import os.path
+
+from glob import glob
+from shutil import move
 
 class RemoteTorrent:
     """Record from seedbox 'info' command
@@ -94,23 +98,35 @@ class LocalTorrent:
     Purpose is to represent a local .torrent file
     The name 'Local' suggests we have direct access to the .torrent file,
      but that we are uncertain of its state on the server
+    
+    Objects created with faulty paths or data are silently created as empty files
 
     LocalTorrent instances are meant to be wrappers for parsed *.torrent files.
     """
-    # names and paths are both unique identifiers
     def __eq__(self,other):
         return self.name == other.name or self.path == other.path
     def __hash__(self):
         return hash(self.name)
     def __init__(self,path):
-        self.logger = logging.getLogger("LocalTorrent")
-        self.time = time.time()
+        self.name = None
+        self.path = None
+        self.size = None
+        path = os.path.normpath(path)
+        if not os.path.isabs(path):
+            # log: not absolute path
+            return
+        if not os.path.isfile(path):
+            # log: invalid filename
+            return
         self.path = path
+        self.time = time.time()
+        self.logger = logging.getLogger("LocalTorrent")
+        self.size = os.path.getsize(self.path)
         self.__parse()
+        # log: created ltor
     def __ne__(self,other):
         return self.name != other.name and self.path != other.path
-    # nonzero name implies a successful bencode parse
-    # nonzero path is required to have an associated local file
+    # need both name and path to be nonzero
     def __nonzero__(self):
         return bool(self.path) and bool(self.name)
     # defined for testing purposes
@@ -118,8 +134,6 @@ class LocalTorrent:
         pass
     def __repr__(self):
         return "<%s,%s>" %(self.name,self.path)
-    def __str__(self):
-        pass
     # tokenize and parse_bencode both from Fredrik Lundh:
     # August 2007 (effbot.org/zone/bencode.htm)
     @classmethod
@@ -156,35 +170,52 @@ class LocalTorrent:
             raise ValueError
         return data
     def __parse(self):
-        self.name = None
-        self.size = None
-        with open(self.path,'r') as tfile:
-            bencode = tfile.read()
         try:
+            with open(self.path,'r') as tfile:
+                bencode = tfile.read()
             src = self.tokenize(bencode)
             tfile_dict = self.parse_bencode(src.next,src.next())
             for token in src:
-                # log error
                 raise SyntaxError("trailing bencode")
-        except (AttributeError,ValueError,StopIteration),e:
-            # log error
+        except OSError as e:
+            # log: file error
             return
-            
+        except (AttributeError,ValueError,StopIteration,SyntaxError) as e:
+            # log: parsing error
+            return
         info = tfile_dict['info']
         del tfile_dict['info']
         del info['pieces']
         tfile_dict.update(info)
         if 'files' in info:
-            self.size = 0
             for fdict in info['files']:
                 self.size += fdict['length'] 
         else:
-            self.size = tfile_dict['length']
+            self.size += tfile_dict['length']
         self.__dict__.update(tfile_dict)
     def query(self,func,key):
         return key in self.__dict__ and func(self.__dict__[key])
-    
-# TODO: Test error handling code
+        # log: query, result
+    def move(self,dest):
+        dest = os.path.normpath(dest)
+        if not os.path.isabs(dest):
+            # log: not absolute path
+            return
+        if os.path.isfile(dest):
+            dest = os.path.dirname(dest)
+        elif not os.path.isdir(dest):
+            # log: not valid file
+            return
+        filename = os.path.basename(self.path)
+        dest = os.path.join(dest,filename)
+        if os.path.exists(dest):
+            # log: won't overwrite existing file or place file in coincident directory
+            return
+        os.path.move(self.path,dest)
+        self.path = dest
+        # log: moved file
+
+# Still need to test Shell
 class Shell:
     """ 
     Maintain a list of local shell and SSH commands in a queue 
@@ -199,13 +230,15 @@ class Shell:
       individually processing each command, and calling func(output,**args)
     """
     __connection_attempts = 5
-    def __init__(self,uname,host):
+    def __init__(self,uname=None,host=None):
         self.logger = logging.getLogger("Shell")
         self.ssh_queue = []
         self.shell_queue = []
         self.host = host
         self.uname = uname
-        self.path = host+"@"+uname
+        self.path = None
+        if self.host and self.uname:
+            self.path = uname+"@"+host
         self.__doing_shell = False
         self.__doing_ssh = False
     def __repr__(self):
@@ -213,6 +246,8 @@ class Shell:
     def __str__(self):
         return self.path
     def __connect(self):
+        if not self.path:
+            return
         for i in reversed(range(0,self.__connection_attempts)):
             try:
                 client = paramiko.SSHClient()
@@ -240,6 +275,8 @@ class Shell:
             exitcode = e.returncode
         return (exitcode,output)
     def __ssh_command(self,command):
+        if not self.path:
+            return
         self.logger.debug("Command: (%s) %s",self,command)
         stdin,stdout,stderr = self.__client.exec_command(command)
         output = ""
@@ -254,11 +291,13 @@ class Shell:
         exitcode = stdout.channel.recv_exit_status()
         return (exitcode,output)
     def add_ssh(self,command,func,args):
+        if not self.path:
+            return
         self.ssh_queue.append( (command,func,args) )
     def add_shell(self,command,func,args):
         self.shell_queue.append( (command,func,args) )
     def do_ssh(self):
-        if self.__doing_ssh:
+        if not self.path or self.__doing_ssh:
             return
         self.__processing_ssh = True
         self.__connect()
@@ -356,6 +395,8 @@ class LocalRecord:
             self.ltor_del(ltor=result)
             ltor_new = LocalTorrent(result.path)
             self.ltor_add(ltor=ltor_new,pos=index)
+    def ltor_sort(self,key=lambda ltor: ltor.size):
+        self.record.sort(key=key)
 
 class RemoteRecord:
     def __init__(self,shell):
@@ -408,13 +449,13 @@ class RemoteRecord:
 
 class Seedbox:
     """
-    Manages the logic of upload/download queues for an individual seedbox
-     as well as upload and download file locations.
+    Manages the upload/download queues for an individual seedbox
+     and download file locations.
      - capacity: represents the capacity
      - up_queue - LocalRecord representing a queue of files to upload. Populated externally.
      - down_queue - RemoteRecord representing a queue of files to download. Populated individually after each successful upload
-     - record - RemoteRecord representing the entirety of torrent files present on a server.
-      - used to ensure unique uploads and to process deletions
+     - info - RemoteRecord representing the totality of the records on the remote server
+      used to organize deletion events
      
      - rules are a tuple of the form (key,func) for use in query functions
      - r_download_valid - list of rules that determine if a download is valid
@@ -452,7 +493,7 @@ class Seedbox:
 
     def __check_composite_rule(self,rule_list,rtor):
         for rule in rule_list:
-            if not rtor_query(*rule):
+            if not rtor.query(*rule):
                 return False
         return True
 
@@ -532,12 +573,14 @@ class Seedbox:
 
     def enqueue(self):
         pass
-        # enqueue an ltor into the upload queue
+    @property
+    def free(self):
+        return self.capacity - self.size
+
 
     def update(self):
         self.shell.add_ssh(self.__info_command,self.__update,{})
         self.shell.add_ssh(self.__size_command,self.__size,{})
-
     def upload(self,space,ltor_iter=None,ltor=None,exitcode=None,output=None):
         if not ltor_iter:
             ltor_iter = iter(self.up_queue)
@@ -560,4 +603,58 @@ class Seedbox:
         else:
             self.upload(space,ltor_iter=ltor_iter)
 
+class Controller:
+    """
+    Controls multiple seedbox instances, manages upload logic
+    - watches local folders for torrent files
+    - 
+    - chooses upload path based on free space availability and capacity
+    """
+    def __init__(self):
+        self.seedbox_list = []
+        # make sure all the paths given are consistently not /-terminated
+        # 
+        self.path_watchlist = []
+        self.path_local_torrent = ""
+        self.r_upload_path = []
+        self.up_queue = LocalRecord(Shell())
+    def __str__(self):
+        pass
+    def __repr__(self):
+        return self
+    # populate 
+    def populate(self):
+        pass
+        # check paths in self.path_list for new torrent files
+
+        # construct a list of torrent files. assign to seedboxes as follows:
+        # - order seedboxes by capacity (smallest first)
+        # First pass:
+        # - check ltor.size against a certain percent of the capacity.
+        #  - continue to the next seedbox if the torrent size is over a given percent of the capacity
+        #  - if there is not enough free space, continue onto the next seedbox
+        #  - otherwise, enqueue in that seedbox
+        # Second pass:
+        # - if we have remaining torrents, either they are too large for all seedboxes (too much data), 
+        # - or there is not enough free space on any server to accomodate them
+        # - in the first case, don't do anything with the torrent (keep in another 'acknowledged but not uploading' list
+        # - in the second case, go down the first list as usual
+
+        # by torrent:
+        # order seedboxes by capacity (smallest first)
+        # order torrents by size (smallest first)
+        # upload torrents until we have no more free space, then move on
+        # once done, upload torrents without going over the certain percent (25%?)
+
+    def scan(self):
+        torrent_pathlist = []
+        for watchpath in self.path_watchlist:
+            torrent_pathlist.extend(glob(path+"/*.torrent"))
+        for path in torrent_pathlist:
+            ltor = LocalTorrent(path)
+            if ltor:
+                ltor.move
+                self.up_queue.add_ltor(ltor=ltor)
+                
+            
 

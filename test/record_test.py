@@ -252,6 +252,7 @@ capacity = 200
 uname = 'uname'
 host = 'host'
 
+# note that validity/path rules are not tested
 class SeedboxTest(unittest.TestCase):
     def setUp(self):
         self.seedbox = Seedbox(uname,host,capacity,paths,rules)
