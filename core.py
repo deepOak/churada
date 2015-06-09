@@ -6,6 +6,7 @@ import time
 import re
 from copy import copy
 import os
+import inspect
 
 from operator import itemgetter
 from glob import glob
@@ -96,9 +97,8 @@ class RemoteTorrent:
         batch = [RemoteTorrent(match.group(),timestamp) for match in info_iter]
         batch.sort(key=lambda rtor: rtor.score)
         return batch
-    def query(self,key,func):
-        return key in self.__dict__ and func(self.__dict__[key])
-        pass
+#    def query(self,key,func):
+#        return key in self.__dict__ and func(self.__dict__[key])
 
 class LocalTorrentError(Exception):
     pass
@@ -218,9 +218,39 @@ class LocalTorrent:
         shutil.move(self.path,dest)
         self.path = dest
         # log: moved file
-    def query(self,func,key):
-        return key in self.__dict__ and func(self.__dict__[key])
+#    def query(self,key,func):
+#        return key in self.__dict__ and func(self.__dict__[key])
         # log: query, result
+
+class RuleError(Exception):
+    pass
+
+class Rule:
+    def __init__(self,key,func):
+        self.key = key
+        self.func = func
+    def query(self,other):
+        return self.key in other.__dict__ and self.func(other.__dict__[self.key])
+
+class CompositeRule:
+    """
+    Allows for arbitrary logical structure composed of rules and logical connectives
+     rules is the ordered list of rules
+     composite_rule is a lambda function that defines the composite rule 
+      ex: lambda x,y: x and y
+          lambda x,y,z,a,b,c: (x and y) or (z and a) and (b and not a)
+      
+    """
+    def __init__(self,rules,crule):
+        self.rules = rules
+        self.crule = crule
+        if len(rules) != len(inspect.getargspec(crule).args):
+            raise RuleError("init error: incorrect number of rules")
+    def query(self,other):
+        query_results = (rule.query(other) for rule in self.rules)
+        return self.crule(*query_results)
+
+
 # Still need to test Shell
 class Shell:
     """ 
@@ -394,13 +424,13 @@ class LocalRecord:
             result = next((e for e in self.record if e.path == path),None)
         return result
     # ltor > name > path
-    def ltor_update(self,ltor=None,name=None,path=None):
-        result = self.ltor_find(ltor=ltor,name=name,path=path)
-        if result:
-            index = self.record.index(result)
-            self.ltor_del(ltor=result)
-            ltor_new = LocalTorrent(result.path)
-            self.ltor_add(ltor=ltor_new,pos=index)
+#    def ltor_update(self,ltor=None,name=None,path=None):
+#        result = self.ltor_find(ltor=ltor,name=name,path=path)
+#        if result:
+#            index = self.record.index(result)
+#            self.ltor_del(ltor=result)
+#            ltor_new = LocalTorrent(result.path)
+#            self.ltor_add(ltor=ltor_new,pos=index)
     def ltor_sort(self,key=lambda ltor: ltor.size):
         self.record.sort(key=key)
 
@@ -490,33 +520,40 @@ class Seedbox:
         self.upload_limit = self.__upload_limit * capacity
         self.download_limit = self.__download_limit * capacity
 
-        self.r_download_valid = rules[0]
-        self.r_download_path = rules[1]
-        self.r_delete_valid = rules[2]
+        self.rules = rules
+
+#        self.r_download_valid = rules['download_valid']
+#        self.r_download_path = rules[1]
+#        self.r_delete_valid = rules[2]
         
         self.logger = logging.getLogger("Seedbox")
         # sort rules by priority 
-        self.r_download_path.sort(key=itemgetter(2))
+        self.rules['download_path'].sort(key=itemgetter(2))
     def __str__(self):
         pass
-    def __check_composite_rule(self,rule_list,rtor):
-        for rule in rule_list:
-            if not rtor.query(*rule):
-                return False
-        return True
+#    def __check_composite_rule(self,rule_list,rtor):
+#        for rule in rule_list:
+#            print rule
+#            if not rtor.query(*rule):
+#                return False
+#        return True
     def __check_download_valid(self,rtor):
-        for rule_list in self.r_download_valid:
-            if not self.__check_composite_rule(rule_list,rtor):
+        for rule in self.rules['download_valid']:
+            if not rule.query(rtor):
                 return False
         return True
+#        for rule_list in self.r_download_valid:
+#            if not self.__check_composite_rule(rule_list,rtor):
+#                return False
+#        return True
     def __check_download_path(self,rtor):
-        for rule_list,download_path,priority in self.r_download_path:
-            if not self.__check_composite_rule(rule_list,rtor):
+        for rule,path,priority in self.rules['download_path']:
+            if rule.query(rtor):
                 return download_path
-        return None # self.path_remote_data
+        return self.path_remote_data
     def __check_delete_valid(self,rtor):
-        for rule_list in self.r_delete_valid:
-            if not self.__check_composite_rule(rule_list,rtor):
+        for rule in self.rules['delete_valid']:
+            if not rule.query(rtor):
                 return False
         return True
     def __size(self,exitcode,output):
@@ -535,11 +572,11 @@ class Seedbox:
         self.update_size()
         self.shell.do_ssh()
         # delete stuff
-        up_queue_size = 0
+        up_size = 0
         for ltor in self.up_queue:
-            if(up_queue_size + ltor.size) < self.upload_limit:
-                up_queue_size += ltor.size
-        delete_size = up_queue_size - self.free
+            if(up_size + ltor.size) < self.upload_limit:
+                up_size += ltor.size
+        delete_size = up_size - self.free
         self.delete(delete_size)
         self.shell.do_ssh()
         # check size
@@ -670,11 +707,11 @@ class Controller:
         pass
     def __repr__(self):
         return self
-    def __check_composite_rule(self,rule_list,ltor):
-        for rule in rule_list:
-            if not ltor.query(*rule):
-                return False
-        return True
+#    def __check_composite_rule(self,rule_list,ltor):
+#        for rule in rule_list:
+#            if not ltor.query(*rule):
+#                return False
+#        return True
     def __check_upload_path(self,ltor):
         for rule_list,upload_path,priority in self.r_upload_rule:
             if self.__check_composite_rule(rule_list,ltor):

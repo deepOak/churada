@@ -132,18 +132,18 @@ class LocalTorrentTest(unittest.TestCase):
         with patch("__builtin__.open", mock_open(read_data=tfile)) as m:
             ltor = LocalTorrent(path)
         self.assertEqual(ltor.__nonzero__(),nonzero_flag)
-    @parameterized.expand(
-      [("lambda_1",tfile_1,'/path',{'key':'size','func':lambda x: x > 3},True),
-       ("lambda_2",tfile_1,'/path',{'key':'size','func':lambda x: x < 3},False),
-       ("lambda_3",tfile_1,'/path',{'key':'announce','func':lambda x: x == 'http://www.tracker.ca'},True),
-       ("regex_1",tfile_1,'/unique',{'key':'path','func':lambda x: bool(re.search('que',x))},True),
-       ("regex_2",tfile_2,'/path',{'key':'announce','func':lambda x: bool(re.search('ca',x))},False),
-       ("regex_3",tfile_3,'/path',{'key':'comment','func':lambda x: bool(re.match('lmao',x))},True)])
-    def query_test(self,_,tfile,path,func_args,query_flag):
-        with patch("__builtin__.open", mock_open(read_data=tfile)) as m:
-            ltor = LocalTorrent(path)
-        result = ltor.query(**func_args)
-        self.assertEqual(result,query_flag)
+#    @parameterized.expand(
+#      [("lambda_1",tfile_1,'/path',{'key':'size','func':lambda x: x > 3},True),
+#       ("lambda_2",tfile_1,'/path',{'key':'size','func':lambda x: x < 3},False),
+#       ("lambda_3",tfile_1,'/path',{'key':'announce','func':lambda x: x == 'http://www.tracker.ca'},True),
+#       ("regex_1",tfile_1,'/unique',{'key':'path','func':lambda x: bool(re.search('que',x))},True),
+#       ("regex_2",tfile_2,'/path',{'key':'announce','func':lambda x: bool(re.search('ca',x))},False),
+#       ("regex_3",tfile_3,'/path',{'key':'comment','func':lambda x: bool(re.match('lmao',x))},True)])
+#    def query_test(self,_,tfile,path,func_args,query_flag):
+#        with patch("__builtin__.open", mock_open(read_data=tfile)) as m:
+#            ltor = LocalTorrent(path)
+#        result = ltor.query(**func_args)
+#        self.assertEqual(result,query_flag)
     @parameterized.expand(
             [("is_dir",tfile_1,("/dir2/dest","/dir2/dest/%s"%(name)),{'isdir':True,'collision':False,'move_flag':True}),
              ("not_abs",tfile_1,("dir2/dest",None),{'isdir':True,'collision':False,'move_flag':False}),
