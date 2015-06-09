@@ -5,10 +5,12 @@ from mock import mock_open
 from mock import patch
 import re
 import __builtin__
-import os
+import os.path
+import shutil
 
 from churada.core import LocalTorrent
-import logging
+from churada.core import LocalTorrentError
+#import logging
 
 tfile_1 = """d8:announce21:http://www.tracker.ca13:announce-listll10:announce-110:announce-2ee13:creation datei10000e7:comment4:blah10:created by7:creator4:infod4:name15:single_file.ext6:lengthi100e12:piece lengthi1000e6:pieces20:123456789012345678907:privatei1eee"""
 
@@ -60,42 +62,45 @@ tfile_3_dict = {'announce':'http://www.tracker.en',
                }
 
 tfile_4 = """d4:infod4:name15:single_file.ext6:pieces0:6:lengthi55eee"""
-
-tfile_zero = """d4:infod4:name:0:6:pieces0:6:lengthi0eee"""
+tfile_zero = """d4:infod4:name0:6:pieces0:6:lengthi0eee"""
+tfile_bad = "asdfklasfiou124klj1lk"
 
 timestamp = 42
 
+path = "/dir1/path.e"
 
-import churada
+name = "path.e"
+
+
 class LocalTorrentTest(unittest.TestCase):
     def setUp(self):
-        self.patcher_isfile = patch('churada.core.os.path.isfile', return_value=True)
-#        self.patcher_isdir = patch.object(churada.core.os.path,'isdir')
-#        self.patcher_exists = patch.object(churada.core.os.path,'exists')
-        self.patcher_getsize = patch('churada.core.os.path.getsize', return_value=0)
-#        self.patcher_move = patch.object(churada.core.os.path,'move')
+        self.patcher_isfile = patch('os.path.isfile',return_value=True)
+        self.patcher_getsize = patch('os.path.getsize', return_value=0)
+        self.patcher_isdir = patch('os.path.isdir',return_value=False)
+        self.patcher_exists = patch('os.path.exists',return_value=True)
+        self.mock_exists = self.patcher_exists.start()
+        self.mock_isdir = self.patcher_isdir.start()
         self.mock_isfile = self.patcher_isfile.start()
-#        self.mock_isdir = self.patcher_isdir.start()
-#        self.mock_exists = self.patcher_exists.start()
         self.mock_getsize = self.patcher_getsize.start()
-#        self.mock_move = self.patcher_move.start()
-        # Defaults for successful ltor creation
-#        self.patcher = patch('churada.core.os')
-#        self.os = self.patcher.start()
-#        self.os.path.getsize.return_value = 0
-#        self.os.path.isfile.return_value = True
-#        self.os.path.isdir.return_value = False
-#        self.os.path.exists.return_value = True
-#        self.os.path.normpath = os.path.normpath
-#        self.os.path.isabs = os.path.isabs
-#        self.os.path.join = os.path.join
-#        self.os.path.dirname = os.path.dirname
-#        self.os.path.basename = os.path.basename
+    @parameterized.expand(
+            [("init_success",tfile_1,'/path',{'isfile':True,'init':True}),
+             ("rel_path",tfile_1,'path',{'isfile':True,'init':False}),
+             ("bad_tfile",tfile_bad,'/path',{'isfile':True,'init':False}),
+             ("bad_path",tfile_1,'/does_not_exist',{'isfile':False,'init':False}),
+             ("zero_tfile",tfile_zero,'/path',{'isfile':True,'init':False})])
+    def init_test(self,_,tfile,path,flags):
+        self.mock_isfile.return_value = flags['isfile']
+        with patch("__builtin__.open",mock_open(read_data=tfile)) as m:
+            if flags['init']:
+                ltor = LocalTorrent(path)
+            else:
+                self.assertRaises(LocalTorrentError,lambda: LocalTorrent(path))
     @parameterized.expand([
         ("parse_1",tfile_1,tfile_1_dict),
         ("parse_2",tfile_2,tfile_2_dict),
         ("parse_3",tfile_3,tfile_3_dict)
         ])
+
     def parse_test(self,_,bencode,control):
         src = LocalTorrent.tokenize(bencode)
         parsed = LocalTorrent.parse_bencode(src.next,src.next())
@@ -119,12 +124,11 @@ class LocalTorrentTest(unittest.TestCase):
         self.assertEqual(ltor1.__eq__(ltor2), eq_flag)
         self.assertEqual(ltor1.__ne__(ltor2), not eq_flag)
     @parameterized.expand(
-       [("nonzero_1",tfile_1,'/path',True),
-        ("nonzero_2",tfile_2,'/path',True),
-        ("nonzero_3",tfile_3,'/path',True),
-        ("zero_path",tfile_1,'',False),
-        ("zero_name",tfile_zero,'/path',False)])
-    def nonzero_test(self,_,tfile,path,nonzero_flag):
+       [("nonzero_1",tfile_1,'/path',True,True),
+        ("nonzero_2",tfile_2,'/path',True,True),
+        ("nonzero_3",tfile_3,'/path',True,True)])
+    def nonzero_test(self,_,tfile,path,isfile_flag,nonzero_flag):
+        self.mock_isfile.return_value = isfile_flag
         with patch("__builtin__.open", mock_open(read_data=tfile)) as m:
             ltor = LocalTorrent(path)
         self.assertEqual(ltor.__nonzero__(),nonzero_flag)
@@ -134,36 +138,32 @@ class LocalTorrentTest(unittest.TestCase):
        ("lambda_3",tfile_1,'/path',{'key':'announce','func':lambda x: x == 'http://www.tracker.ca'},True),
        ("regex_1",tfile_1,'/unique',{'key':'path','func':lambda x: bool(re.search('que',x))},True),
        ("regex_2",tfile_2,'/path',{'key':'announce','func':lambda x: bool(re.search('ca',x))},False),
-       ("regex_3",tfile_3,'/path',{'key':'comment','func':lambda x: bool(re.match('lmao',x))},True)]
-       )
+       ("regex_3",tfile_3,'/path',{'key':'comment','func':lambda x: bool(re.match('lmao',x))},True)])
     def query_test(self,_,tfile,path,func_args,query_flag):
         with patch("__builtin__.open", mock_open(read_data=tfile)) as m:
             ltor = LocalTorrent(path)
         result = ltor.query(**func_args)
         self.assertEqual(result,query_flag)
     @parameterized.expand(
-            [("move_dir_1",tfile_1,("/dir1/path.e","/dir2/dest","/dir2/dest/path.e"),
-                 {'dest_isfile':False,'dest_isdir':True,'mvdest_exists':False,'call_move':True})
-        #     ("move_dir_2",tfile_1,("/dir1/path.e",)
-
-                                
-            ])
+            [("is_dir",tfile_1,("/dir2/dest","/dir2/dest/%s"%(name)),{'isdir':True,'collision':False,'move_flag':True}),
+             ("not_abs",tfile_1,("dir2/dest",None),{'isdir':True,'collision':False,'move_flag':False}),
+             ("collision_1",tfile_1,("/dir2/dest/","/dir2/dest/%s"%(name)),{'isdir':True,'collision':True,'move_flag':True}),
+             ("collision_2",tfile_1,("/dir2/dest/file.f","/dir2/dest/file.f"),{'isdir':False,'collision':True,'move_flag':True}) ])
     def move_test(self,_,tfile,paths,flags):
-        path,dest,path_ = paths
+        path = "/dir1/path.e"
+        dest,path_ = paths
         with patch("__builtin__.open", mock_open(read_data=tfile)) as m:
             ltor = LocalTorrent(path)
-        self.mock_isfile.return_value = flags['dest_isfile']
-        self.mock_isdir.return_value = flags['dest_isdir']
-        self.mock_exists.return_value = flags['mvdest_exists']
-#        ltor.move(dest)
-        self.assertEquals(ltor.path,path_)
-        if flags['call_move']:
-            self.os.path.move.assert_called_once_with(path,path_)
-        else:
-            self.assertEqual(self.os.path.move.called,False)
+        self.mock_isdir.return_value = flags['isdir']
+        self.mock_exists.return_value = flags['collision']
+        with patch('shutil.move') as mock_move:
+            if flags['move_flag']:
+                ltor.move(dest)
+                mock_move.assert_called_once_with(path,path_)
+                self.assertEquals(ltor.path,path_)
+            else:
+                self.assertRaises(LocalTorrentError,lambda: ltor.move(dest))
+                self.assertEqual(mock_move.called,False)
+                self.assertEqual(ltor.path,path)
     def tearDown(self):
-        self.patcher_isfile.stop()
-#        self.patcher_isdir.stop()
-#        self.patcher_exists.stop()
-        self.patcher_getsize.stop()
-#        self.patcher_move.stop()
+        patch.stopall()

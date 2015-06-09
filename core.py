@@ -5,10 +5,14 @@ import select
 import time
 import re
 from copy import copy
-import os.path
+import os
 
+from operator import itemgetter
 from glob import glob
-from shutil import move
+import shutil
+
+class RemoteTorrentError(Exception):
+    pass
 
 class RemoteTorrent:
     """Record from seedbox 'info' command
@@ -68,18 +72,22 @@ class RemoteTorrent:
         info = re.sub(self.__size_pattern, self.__size_convert, info)
         info = re.sub(self.__time_pattern, self.__time_convert, info)
         matchobj = re.search(self.__record_pattern,info)
-        if matchobj:
-            info_dict = matchobj.groupdict()
-            for key in info_dict:
-                try:
-                    info_dict[key] = float(info_dict[key])
-                except (TypeError,ValueError):
-                    pass
-            if info_dict['atime'] > 0:
-                info_dict['score'] = 10**6*info_dict['ratio']/info_dict['atime']
-            if info_dict['state'] not in self.__state_list:
-                info_dict['state'] = None
-            self.__dict__.update(info_dict)
+        if not matchobj:
+            raise RemoteTorrentError("No data present")
+
+        info_dict = matchobj.groupdict()
+        for key in info_dict:
+            try:
+                info_dict[key] = float(info_dict[key])
+            except (TypeError,ValueError):
+               pass
+        if info_dict['atime'] > 0:
+            info_dict['score'] = 10**6*info_dict['ratio']/info_dict['atime']
+        if info_dict['state'] not in self.__state_list:
+            info_dict['state'] = None
+        self.__dict__.update(info_dict)
+        if not self:
+            raise RemoteTorrentError("init erro: torrent has no record")
     @classmethod
     def batch_parse(cls,info,timestamp):
         info = re.sub(cls.__size_pattern, cls.__size_convert, info)
@@ -91,6 +99,9 @@ class RemoteTorrent:
     def query(self,key,func):
         return key in self.__dict__ and func(self.__dict__[key])
         pass
+
+class LocalTorrentError(Exception):
+    pass
 
 class LocalTorrent:
     """ Record constructed from a .torrent file
@@ -108,19 +119,17 @@ class LocalTorrent:
     def __hash__(self):
         return hash(self.name)
     def __init__(self,path):
+        self.logger = logging.getLogger("LocalTorrent")
         self.name = None
         self.path = None
         self.size = None
         path = os.path.normpath(path)
         if not os.path.isabs(path):
-            # log: not absolute path
-            return
+            raise LocalTorrentError("init error: path is not absolute: %s"%(path))
         if not os.path.isfile(path):
-            # log: invalid filename
-            return
+            raise LocalTorrentError("init error: path is not a file: %s"%(path))
         self.path = path
         self.time = time.time()
-        self.logger = logging.getLogger("LocalTorrent")
         self.size = os.path.getsize(self.path)
         self.__parse()
         # log: created ltor
@@ -178,11 +187,11 @@ class LocalTorrent:
             for token in src:
                 raise SyntaxError("trailing bencode")
         except OSError as e:
-            # log: file error
-            return
+            # log error
+            raise LocalTorrentError("parse error: file error")
         except (AttributeError,ValueError,StopIteration,SyntaxError) as e:
-            # log: parsing error
-            return
+            # log error
+            raise LocalTorrentError("parse error: badly formed data")
         info = tfile_dict['info']
         del tfile_dict['info']
         del info['pieces']
@@ -193,28 +202,25 @@ class LocalTorrent:
         else:
             self.size += tfile_dict['length']
         self.__dict__.update(tfile_dict)
-    def query(self,func,key):
-        return key in self.__dict__ and func(self.__dict__[key])
-        # log: query, result
+        if not self:
+            raise LocalTorrentError("init error: zero record")
+    # moves the file (filename intact) to a directory
     def move(self,dest):
         dest = os.path.normpath(dest)
         if not os.path.isabs(dest):
-            # log: not absolute path
-            return
-        if os.path.isfile(dest):
-            dest = os.path.dirname(dest)
-        elif not os.path.isdir(dest):
-            # log: not valid file
-            return
-        filename = os.path.basename(self.path)
-        dest = os.path.join(dest,filename)
-        if os.path.exists(dest):
-            # log: won't overwrite existing file or place file in coincident directory
-            return
-        os.path.move(self.path,dest)
+            raise LocalTorrentError("move error: path not absolute: %s"%(self.path))
+        if os.path.isdir(dest):
+            filename = os.path.basename(self.path)
+            dest = os.path.join(dest,filename)
+        #if not os.path.isdir(os.path.dirname(dest)):
+        #    raise LocalTorrentError("move error: no valid directory in path: %s"%(self.path))
+        self.last_path = self.path
+        shutil.move(self.path,dest)
         self.path = dest
         # log: moved file
-
+    def query(self,func,key):
+        return key in self.__dict__ and func(self.__dict__[key])
+        # log: query, result
 # Still need to test Shell
 class Shell:
     """ 
@@ -445,8 +451,6 @@ class RemoteRecord:
             index = self.record.index(result)
             self.rtor_del(rtor=result)
             self.rtor_add(name=result.name,pos=index)
-
-
 class Seedbox:
     """
     Manages the upload/download queues for an individual seedbox
@@ -464,6 +468,8 @@ class Seedbox:
       - sorted by priority; first match is used
      - r_delete_valid - list of rules that determine if a deletion is valid
     """
+    __upload_limit = 0.25
+    __download_limit = 0.25
     __upload_command = "rsync -n %s %s"
     __download_command = "rsync -rn %s %s"
     __delete_command = "deluge-console \"connect 127.0.0.1:33307; info %s\"" # rm --remove_data %s
@@ -481,51 +487,69 @@ class Seedbox:
         self.path_local_data = paths[2]
         
         self.capacity = capacity
+        self.upload_limit = self.__upload_limit * capacity
+        self.download_limit = self.__download_limit * capacity
 
         self.r_download_valid = rules[0]
         self.r_download_path = rules[1]
         self.r_delete_valid = rules[2]
         
         self.logger = logging.getLogger("Seedbox")
-
+        # sort rules by priority 
+        self.r_download_path.sort(key=itemgetter(2))
     def __str__(self):
         pass
-
     def __check_composite_rule(self,rule_list,rtor):
         for rule in rule_list:
             if not rtor.query(*rule):
                 return False
         return True
-
     def __check_download_valid(self,rtor):
         for rule_list in self.r_download_valid:
             if not self.__check_composite_rule(rule_list,rtor):
                 return False
         return True
-
     def __check_download_path(self,rtor):
         for rule_list,download_path,priority in self.r_download_path:
             if not self.__check_composite_rule(rule_list,rtor):
                 return download_path
-        return self.path_remote_data
-
+        return None # self.path_remote_data
     def __check_delete_valid(self,rtor):
         for rule_list in self.r_delete_valid:
             if not self.__check_composite_rule(rule_list,rtor):
                 return False
         return True
-
     def __size(self,exitcode,output):
         if exitcode == 0:
             match = re.match("\d+",output)
             self.size = int(match.group())
-
     def __update(self,exitcode,output):
         if exitcode == 0:
             rtor_list = RemoteTorrent.batch_parse(output,time.time())
             self.info = RemoteRecord(self.shell)
             for rtor in rtor_list:
                 self.info.add_rtor(rtor=rtor)
+    def act(self):
+        # update
+        self.update_info()
+        self.update_size()
+        self.shell.do_ssh()
+        # delete stuff
+        up_queue_size = 0
+        for ltor in self.up_queue:
+            if(up_queue_size + ltor.size) < self.upload_limit:
+                up_queue_size += ltor.size
+        delete_size = up_queue_size - self.free
+        self.delete(delete_size)
+        self.shell.do_ssh()
+        # check size
+        self.update_size()
+        self.shell.do_ssh()
+        # upload files
+        self.upload(self.free)
+        self.shell.do_shell()
+        self.download(self.download_limit)
+        self.shell.do_shell()
     def delete(self,space,rtor_iter=None,rtor=None,exitcode=None,output=None):
         if not rtor_iter:
             rtor_iter = iter(self.info)
@@ -544,7 +568,6 @@ class Seedbox:
         func = self.delete
         args = {'rtor':rtor,'rtor_iter':rtor_iter,'space':space}
         self.shell.add_ssh(command,func,args)
-
     def download(self,space,rtor_iter=None,rtor=None,exitcode=None,output=None):
         if not rtor_iter:
             rtor_iter = iter(self.down_queue)
@@ -563,6 +586,8 @@ class Seedbox:
         # if we have enough space, download
         if rtor.size <= space:
             download_path = self.__check_download_path(rtor)
+            if not download_path:
+                download_path = self.path_local_data
             command = self.__download_command %(self.path_remote_data,download_path)
             func = self.download
             args = {'rtor':rtor,'rtor_iter':rtor_iter,'space':space}
@@ -570,16 +595,14 @@ class Seedbox:
         # otherwise, move on 
         else:
             self.download(space,rtor_iter=rtor_iter)
-
-    def enqueue(self):
-        pass
+    def enqueue(self,ltor):
+        self.up_queue.add_ltor(ltor=ltor)
     @property
     def free(self):
         return self.capacity - self.size
-
-
-    def update(self):
+    def update_info(self):
         self.shell.add_ssh(self.__info_command,self.__update,{})
+    def update_size(self):
         self.shell.add_ssh(self.__size_command,self.__size,{})
     def upload(self,space,ltor_iter=None,ltor=None,exitcode=None,output=None):
         if not ltor_iter:
@@ -603,6 +626,9 @@ class Seedbox:
         else:
             self.upload(space,ltor_iter=ltor_iter)
 
+class ControllerError(Exception):
+    pass
+
 class Controller:
     """
     Controls multiple seedbox instances, manages upload logic
@@ -610,51 +636,110 @@ class Controller:
     - 
     - chooses upload path based on free space availability and capacity
     """
-    def __init__(self):
-        self.seedbox_list = []
-        # make sure all the paths given are consistently not /-terminated
-        # 
-        self.path_watchlist = []
-        self.path_local_torrent = ""
-        self.r_upload_path = []
+    __upload_limit = 0.25
+    def __init__(self,seedbox_list,path_watchlist,path_local_torrent,path_local_invalid,r_upload_path):
+        self.logger = logging.getLogger("Controller")
         self.up_queue = LocalRecord(Shell())
+        self.seedbox_list = seedbox_list
+        self.r_upload_path = r_upload_path
+
+        self.path_local_torrent = os.path.normpath(path_local_torrent)
+        self.path_local_invalid = os.path.normpath(path_local_invalid)
+        self.path_watchlist = []
+        # check valdity of paths
+        for watchpath in path_watchlist:
+            watchpath = os.path.normpath(watchpath)
+            if os.path.isdir(watchpath) and os.path.isabs(watchpath):
+                self.path_watchlist.append(watchpath)
+        # sort rules by priority
+        self.r_upload_path.sort(key=itemgetter(2))
+        # check variables
+        if not os.path.isabs(self.path_local_torrent):
+            raise ControllerError("init error: not absolute path: %s"%(self.path_local_torrent))
+        if not os.path.isabs(self.path_local_invalid):
+            raise ControllerError("init error: not absolute path: %s"%(self.path_local_invalid))
+        if not os.path.isdir(self.path_local_torrent):
+            raise ControllerError("init error: not directory: %s"%(self.path_local_torrent))
+        if not os.path.isdir(self.path_local_invalid):
+            raise ControllerError("init error: not directory: %s"%(self.path_local_invalid))
+        if not self.path_watchlist:
+            raise ControllerError("no valid watchpaths")
+        if not seedbox_list:
+            raise ControllerError("no seedboxes")
     def __str__(self):
         pass
     def __repr__(self):
         return self
+    def __check_composite_rule(self,rule_list,ltor):
+        for rule in rule_list:
+            if not ltor.query(*rule):
+                return False
+        return True
+    def __check_upload_path(self,ltor):
+        for rule_list,upload_path,priority in self.r_upload_rule:
+            if self.__check_composite_rule(rule_list,ltor):
+                return upload_path
+        return None 
+    # act
+    def act(self):
+        for seedbox in seedbox_list:
+            seedbox.act()
     # populate 
     def populate(self):
-        pass
-        # check paths in self.path_list for new torrent files
-
-        # construct a list of torrent files. assign to seedboxes as follows:
-        # - order seedboxes by capacity (smallest first)
-        # First pass:
-        # - check ltor.size against a certain percent of the capacity.
-        #  - continue to the next seedbox if the torrent size is over a given percent of the capacity
-        #  - if there is not enough free space, continue onto the next seedbox
-        #  - otherwise, enqueue in that seedbox
-        # Second pass:
-        # - if we have remaining torrents, either they are too large for all seedboxes (too much data), 
-        # - or there is not enough free space on any server to accomodate them
-        # - in the first case, don't do anything with the torrent (keep in another 'acknowledged but not uploading' list
-        # - in the second case, go down the first list as usual
-
-        # by torrent:
-        # order seedboxes by capacity (smallest first)
-        # order torrents by size (smallest first)
-        # upload torrents until we have no more free space, then move on
-        # once done, upload torrents without going over the certain percent (25%?)
-
+        seedbox_free = [(seedbox,seedbox.free) for seedbox in seedbox_list]
+        seedbox_capacity = [(seedbox,seedbox.capacity*self.__upload_limit) for seedbox in seedbox_list]
+        # first check upload rules
+        for ltor in self.up_queue:
+            seedbox = self.__check_upload_path(ltor)
+            if seedbox and ltor.size < seedbox_capacity[seedbox]:
+                seedbox.enqueue(ltor)
+                seedbox_capacity[seedbox] -= ltor.size
+                seedbox_free[seedbox] -= ltor.size
+                self.up_queue.del_ltor(ltor=ltor)
+       # second: order by free space
+        for ltor in self.up_queue:
+            try:
+                seedbox = next(seedbox for seedbox,free in sorted(seedbox_free.items(),key=itemgetter(1)) if ltor.size < free)
+            except StopIteration:
+                 pass
+            else:
+                seedbox.enqueue(ltor)
+                self.up_queue.del_ltor(ltor=ltor)
+                seedbox_free[seedbox] -= ltor.size
+                seedbox_capacity[seedbox] -= ltor.size
+        # third: order by capacity remaining
+        for ltor in self.up_queue:
+            try:
+                seedbox = next(seedbox for seedbox,capacity in sorted(seedbox_capacity.items(),key=itemgetter(1)) if ltor.size < capacity)
+            except StopIteration:
+                pass
+            else:
+                seedbox.enqueue(ltor)
+                self.up_queue.del_ltor(ltor=ltor)
+                seedbox_free[seedbox] -= ltor.size
+                seedbox_capacity[seedbox] -= ltor.size
+        # first: check upload rules. upload to seedbox with matching rule, highest priority
+        # second: order seedboxes by real free space remaining. upload to seedbox with smallest but that can accomodate torrent
+        # third: order seedboxes by effective capacity (some multiple of their total capacity). upload to seedbox with the smallest that can accomodate torrent
     def scan(self):
         torrent_pathlist = []
         for watchpath in self.path_watchlist:
-            torrent_pathlist.extend(glob(path+"/*.torrent"))
+            path_expr = os.path.join(watchpath,"*.torrent")
+            tfiles = glob(path_expr)
+            torrent_pathlist.extend(tfiles)
         for path in torrent_pathlist:
-            ltor = LocalTorrent(path)
-            if ltor:
-                ltor.move
+            try:
+                ltor = LocalTorrent(path)
+            except Exception as e:
+                logger.error(e)
+            else:
                 self.up_queue.add_ltor(ltor=ltor)
-                
-            
-
+                ltor.move(self.path_local_torrent)
+#            up_queue_size = sum(ltor.size for ltor in seedbox.up_queue)
+#            max_upload = self.__upload_limit * seedbox.capacity
+#            up_queue_size = 0
+#            for ltor in seedbox.up_queue:
+#                if (up_queue_size + ltor.size) < max_upload:
+#                    up_queue_size += ltor.size
+#            delete_size = up_queue_size - seedbox.free
+#            seedbox.delete(delete_size)

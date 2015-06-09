@@ -4,6 +4,7 @@ from mock import MagicMock
 from mock import patch
 import re
 
+from churada.core import RemoteTorrentError
 from churada.core import RemoteTorrent
 import logging
 
@@ -166,7 +167,7 @@ Seed time: 0 days 00:00:00 Active: 67 days 16:09:22
 Tracker status: tracker.ca: Announce OK
 Progress: 44.4% [#####~~~~]"""
 
-info_bad_state = """Name: x
+info_bad_state = """Name: x 
 ID: abcdef1234567890
 State: x Down Speed: 16.8 MiB/s Up Speed: 44.9 KiB/s
 Seeds: 13 (86) Peers: 1 (6) Availability: 21.33
@@ -183,9 +184,8 @@ class RemoteTorrentTest(unittest.TestCase):
         ("paused",[info_paused,timestamp],dict_paused),
         ("checking",[info_checking,timestamp],dict_checking),
         ("error",[info_error,timestamp],dict_error),
-        ("downloading",[info_downloading,timestamp],dict_downloading),
-        ("empty_info",["",timestamp],{'name':None,'state':None}) ]
-       )
+        ("downloading",[info_downloading,timestamp],dict_downloading)
+      ])
     @patch('logging.getLogger')
     def parse_test(self,_,func_args,control,mock_logger):
         mock_logger.return_value = MagicMock()
@@ -217,10 +217,7 @@ class RemoteTorrentTest(unittest.TestCase):
         ("nonzero_3",info_error,True),
         ("nonzero_4",info_paused,True),
         ("nonzero_5",info_checking,True),
-        ("nonzero_6",info_unique_title,True),
-        ("zero_1","",False),
-        ("zero_2",info_bad_state,False)]
-       )
+        ("nonzero_6",info_unique_title,True)])
     def nonzero_test(self,_,info,nonzero_flag):
         rtor = RemoteTorrent(info,timestamp)
         self.assertEqual(bool(rtor),nonzero_flag)

@@ -315,6 +315,8 @@ class SeedboxTest(unittest.TestCase):
         while rtor_control and rtor_ != rtor_control:
             rtor_ = rtor_iter_.next()
         download_path = self.seedbox._Seedbox__check_download_path(rtor_)
+        if not download_path:
+            download_path = self.seedbox.path_local_data
         command_ = self.seedbox._Seedbox__download_command %(self.seedbox.path_remote_data,download_path)
         func_ = self.seedbox.download
         space_ = func_args['space']
