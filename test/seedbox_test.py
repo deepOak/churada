@@ -7,15 +7,15 @@ from churada.seedbox import Seedbox
 from churada.rule import Rule,CompositeRule
 from generators import ltor_gen,rtor_gen
 
-ltor_test = [ltor_gen(name=str(i),path=str(i),size=i) for i in range(0,5)]
-ltor_elem = ltor_gen(name='5',path='5',size=5)
-ltor_empty = ltor_gen(name='ltor_empty')
+ltor_test = [ltor_gen(name=str(i),path="/"+str(i),size=i) for i in range(0,5)]
+ltor_elem = ltor_gen(name='5',path='/5',size=5)
+ltor_empty = ltor_gen(name='ltor_empty',path='/path_empty')
 
 rtor_test = [rtor_gen(name=str(i),state=str(i),size=i) for i in range(0,5)]
 rtor_elem = rtor_gen(name='5',state='5',size=5)
 
 down_list = [rtor_gen(name=str(i),state=str(i),size=i) for i in range(10,5,-1)]
-up_list = [ltor_gen(name=str(i),path=str(i),size=i) for i in range(10,5,-1)]
+up_list = [ltor_gen(name=str(i),path="/"+str(i),size=i) for i in range(10,5,-1)]
 info_list = [rtor_elem] + [rtor_gen(name=str(i),state=str(i),size=i) for i in range(20,5,-1)]
 size = 185
 paths = ("remote_torrent","remote_data","local_data")

@@ -1,4 +1,4 @@
-from mock import MagicMock
+from mock import MagicMock, patch, mock_open
 from string import Template
 import os
 
@@ -35,9 +35,9 @@ Size: $csize/$size Ratio: $ratio
 Seed time: $stime Active: $atime
 Tracker status: $tracker: $tracker_status""")
 
-def rtor_gen(name=None,
+def rtor_gen(name,
+             state,
              id='abcdef1234567890',
-             state=None,
              uspeed='53',
              cseed='5',
              tseed='10',
@@ -51,15 +51,38 @@ def rtor_gen(name=None,
              atime='20000',
              tracker='tracker.com',
              tracker_status='Announce OK'):
-    if not (name and state):
-        raise RemoteTorrentError("generator requires a name and state")
     if not csize or csize > size:
         csize = size
     rtor_data = rtor_template.substitute(**locals())
     timestamp = 12345
     return RemoteTorrent(rtor_data,timestamp)
 
-ltor_template = Template("""""")
+ltor_template = Template("""d8:announce${announcelen}:${announce}4:infod4:name${namelen}:${name}6:lengthi${size}e6:pieces0:12:piece lengthi${piece_length}eee""")
+
+def ltor_gen(name,
+             path,
+             announce='http://www.tracker.com',
+             size=1024,
+             piece_length='524288'):
+    ltor_data = ltor_template.substitute(announcelen=len(announce),
+                                         announce=announce,
+                                         namelen=len(name),
+                                         name=name,
+                                         size=size,
+                                         piece_length=piece_length)
+    patcher_isfile = patch('os.path.isfile',return_value=True)
+    patcher_getsize = patch('os.path.getsize',return_value=0)
+    patcher_open = patch("__builtin__.open",mock_open(read_data=ltor_data))
+    patcher_isfile.start()
+    patcher_getsize.start()
+    patcher_open.start()
+
+    ltor = LocalTorrent(path)
+
+    patch.stopall()
+    return ltor
+
+
 
 #def ltor_gen(name=None,
 

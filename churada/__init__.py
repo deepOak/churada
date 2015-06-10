@@ -1,1 +1,1 @@
-__all__ = ['core','test']
+__all__ = ['controller','record','rule','seedbox','shell','torrent']

@@ -62,7 +62,6 @@ class RemoteTorrent:
         info = re.sub(self.__time_pattern, self.__time_convert, info)
         matchobj = re.search(self.__record_pattern,info)
         if not matchobj:
-            print info
             raise RemoteTorrentError("No data present")
 
         info_dict = matchobj.groupdict()
@@ -78,7 +77,6 @@ class RemoteTorrent:
 #            info_dict['state'] = None
         self.__dict__.update(info_dict)
         if not self:
-            print self.__dict__
             raise RemoteTorrentError("init error: torrent has no record")
     @classmethod
     def batch_parse(cls,info,timestamp):

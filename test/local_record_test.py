@@ -6,9 +6,9 @@ from mock import patch
 from churada.record import LocalRecord
 from generators import ltor_gen,rtor_gen
 
-ltor_test = [ltor_gen(name=str(i),path=str(i),size=i) for i in range(0,5)]
-ltor_elem = ltor_gen(name='5',path='5',size=5)
-ltor_empty = ltor_gen(name='ltor_empty')
+ltor_test = [ltor_gen(name=str(i),path='/'+str(i),size=i) for i in range(0,5)]
+ltor_elem = ltor_gen(name='5',path='/5',size=5)
+ltor_empty = ltor_gen(name='ltor_empty',path='/emptypath')
 
 class LocalRecordTest(unittest.TestCase):
     def setUp(self):
@@ -20,17 +20,18 @@ class LocalRecordTest(unittest.TestCase):
 #        ("empty_object_2",ltor_test,{'ltor':ltor_gen(path='ltor_empty')},{},False),
 #        ("empty_path",ltor_test,{'path':''},{},False),
         ("duplicate_object",ltor_test,{'ltor':ltor_test[3]},{},False),
-        ("duplicate_path_1",ltor_test,{'path':'3'},{},False),
-        ("duplicate_path_2",ltor_test,{'ltor':ltor_gen(path=str(4))},{},False),
-        ("unique_object",ltor_test,{'ltor':ltor_elem},{'name':'5','path':'5'},True),
-        ("unique_path",ltor_test,{'path':'5'},{'name':'5','path':'5'},True),
-        ("insert",ltor_test,{'ltor':ltor_elem,'pos':2},{'name':'5','path':'5'},True),
-        ("arg_priority",ltor_test,{'ltor':ltor_elem,'path':'6'},{'name':'5','path':'5'},True)]
+        ("duplicate_path_1",ltor_test,{'path':'/3'},{'name':'4','path':'/3'},False),
+        ("duplicate_path_2",ltor_test,{'ltor':ltor_gen(name='not4',path='/4')},{},False),
+        ("unique_object",ltor_test,{'ltor':ltor_elem},{'name':'5','path':'/5'},True),
+        ("unique_path",ltor_test,{'path':'5'},{'name':'5','path':'/5'},True),
+        ("insert",ltor_test,{'ltor':ltor_elem,'pos':2},{'name':'5','path':'/5'},True),
+        ("arg_priority",ltor_test,{'ltor':ltor_elem,'path':'/6'},{'name':'5','path':'/5'},True)]
         )
     @patch('churada.record.LocalTorrent')
     @patch('time.time')
     def ltor_add_test(self,_,control,func_args,obj_args,append_flag,mock_time,mock_ltor):
-        mock_ltor.return_value = ltor_gen(**obj_args)
+        if obj_args:
+            mock_ltor.return_value = ltor_gen(**obj_args)
         control = control[:]
         self.lrec.record = control[:]
         self.lrec.ltor_add(**func_args)
@@ -43,17 +44,17 @@ class LocalRecordTest(unittest.TestCase):
     @parameterized.expand(
        [("empty_args",ltor_test,{},None),
         ("present_name",ltor_test,{'name':'3'},ltor_test[3]),
-        ("present_path",ltor_test,{'path':'2'},ltor_test[2]),
+        ("present_path",ltor_test,{'path':'/2'},ltor_test[2]),
         ("present_object",ltor_test,{'ltor':ltor_test[4]},ltor_test[4]),
-        ("equal_object_1",ltor_test,{'ltor':ltor_gen(name='4',path='not 4')},ltor_test[4]),
-        ("equal_object_2",ltor_test,{'ltor':ltor_gen(name='not 4',path = '4')},ltor_test[4]),
+        ("equal_object_1",ltor_test,{'ltor':ltor_gen(name='4',path='/not4')},ltor_test[4]),
+        ("equal_object_2",ltor_test,{'ltor':ltor_gen(name='not4',path='/4')},ltor_test[4]),
         ("absent_name",ltor_test,{'name':'5'},None),
-        ("absent_path",ltor_test,{'path':'5'},None),
-        ("absent_object",ltor_test,{'ltor':ltor_gen(name='5',path='5')},None),
-        ("arg_priority_1",ltor_test,{'ltor':ltor_test[3],'name':'4','path':'2'},ltor_test[3]),
+        ("absent_path",ltor_test,{'path':'/5'},None),
+        ("absent_object",ltor_test,{'ltor':ltor_gen(name='5',path='/5')},None),
+        ("arg_priority_1",ltor_test,{'ltor':ltor_test[3],'name':'4','path':'/2'},ltor_test[3]),
         ("arg_priority_2",ltor_test,{'ltor':ltor_test[3],'name':'4'},ltor_test[3]),
-        ("arg_priority_3",ltor_test,{'ltor':ltor_test[3],'path':'4'},ltor_test[3]),
-        ("arg_priority_4",ltor_test,{'name':'3','path':'4'},ltor_test[3])]
+        ("arg_priority_3",ltor_test,{'ltor':ltor_test[3],'path':'/4'},ltor_test[3]),
+        ("arg_priority_4",ltor_test,{'name':'3','path':'/4'},ltor_test[3])]
        )
     def ltor_find_test(self,_,control,func_args,return_val):
         self.lrec.record = control[:]
@@ -65,15 +66,15 @@ class LocalRecordTest(unittest.TestCase):
 #        ("empty_path",ltor_test,{'path':''},[],False),
 #        ("empty_name",ltor_test,{'name':''},[],False),
         ("present_object",ltor_test,{'ltor':ltor_elem},[3,ltor_elem],True),
-        ("present_path",ltor_test,{'path':'5'},[3,ltor_elem],True),
+        ("present_path",ltor_test,{'path':'/5'},[3,ltor_elem],True),
         ("present_name",ltor_test,{'name':'5'},[3,ltor_elem],True),
         ("absent_name",ltor_test,{'name':'6'},[],False),
-        ("absent_path",ltor_test,{'path':'6'},[],False),
+        ("absent_path",ltor_test,{'path':'/6'},[],False),
         ("absent_object",ltor_test,{'ltor':ltor_elem},[],False),
-        ("arg_priority_1",ltor_test,{'ltor':ltor_elem,'name':'3','path':'2'},[3,ltor_elem],True),
+        ("arg_priority_1",ltor_test,{'ltor':ltor_elem,'name':'3','path':'/2'},[3,ltor_elem],True),
         ("arg_priority_2",ltor_test,{'ltor':ltor_elem,'name':'3'},[3,ltor_elem],True),
-        ("arg_priority_3",ltor_test,{'ltor':ltor_elem,'path':'3'},[3,ltor_elem],True),
-        ("arg_priority_4",ltor_test,{'name':'5','path':'4'},[3,ltor_elem],True)]
+        ("arg_priority_3",ltor_test,{'ltor':ltor_elem,'path':'/3'},[3,ltor_elem],True),
+        ("arg_priority_4",ltor_test,{'name':'5','path':'/4'},[3,ltor_elem],True)]
        )
     def ltor_del_test(self,_,control,func_args,ins_args,del_flag):
         self.lrec.record = control[:]

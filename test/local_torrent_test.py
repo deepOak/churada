@@ -142,26 +142,26 @@ class LocalTorrentTest(unittest.TestCase):
 #            ltor = LocalTorrent(path)
 #        result = ltor.query(**func_args)
 #        self.assertEqual(result,query_flag)
-    @parameterized.expand(
-            [("is_dir",tfile_1,("/dir2/dest","/dir2/dest/%s"%(name)),{'isdir':True,'collision':False,'move_flag':True}),
-             ("not_abs",tfile_1,("dir2/dest",None),{'isdir':True,'collision':False,'move_flag':False}),
-             ("collision_1",tfile_1,("/dir2/dest/","/dir2/dest/%s"%(name)),{'isdir':True,'collision':True,'move_flag':True}),
-             ("collision_2",tfile_1,("/dir2/dest/file.f","/dir2/dest/file.f"),{'isdir':False,'collision':True,'move_flag':True}) ])
-    def move_test(self,_,tfile,paths,flags):
-        path = "/dir1/path.e"
-        dest,path_ = paths
-        with patch("__builtin__.open", mock_open(read_data=tfile)) as m:
-            ltor = LocalTorrent(path)
-        self.mock_isdir.return_value = flags['isdir']
-        self.mock_exists.return_value = flags['collision']
-        with patch('shutil.move') as mock_move:
-            if flags['move_flag']:
-                ltor.move(dest)
-                mock_move.assert_called_once_with(path,path_)
-                self.assertEquals(ltor.path,path_)
-            else:
-                self.assertRaises(LocalTorrentError,lambda: ltor.move(dest))
-                self.assertEqual(mock_move.called,False)
-                self.assertEqual(ltor.path,path)
+#    @parameterized.expand(
+#            [("is_dir",tfile_1,("/dir2/dest","/dir2/dest/%s"%(name)),{'isdir':True,'collision':False,'move_flag':True}),
+#             ("not_abs",tfile_1,("dir2/dest",None),{'isdir':True,'collision':False,'move_flag':False}),
+#             ("collision_1",tfile_1,("/dir2/dest/","/dir2/dest/%s"%(name)),{'isdir':True,'collision':True,'move_flag':True}),
+#             ("collision_2",tfile_1,("/dir2/dest/file.f","/dir2/dest/file.f"),{'isdir':False,'collision':True,'move_flag':True}) ])
+#    def move_test(self,_,tfile,paths,flags):
+#        path = "/dir1/path.e"
+#        dest,path_ = paths
+#        with patch("__builtin__.open", mock_open(read_data=tfile)) as m:
+#            ltor = LocalTorrent(path)
+#        self.mock_isdir.return_value = flags['isdir']
+#        self.mock_exists.return_value = flags['collision']
+#        with patch('shutil.move') as mock_move:
+#            if flags['move_flag']:
+#                ltor.move(dest)
+#                mock_move.assert_called_once_with(path,path_)
+#                self.assertEquals(ltor.path,path_)
+#            else:
+#                self.assertRaises(LocalTorrentError,lambda: ltor.move(dest))
+#                self.assertEqual(mock_move.called,False)
+#                self.assertEqual(ltor.path,path)
     def tearDown(self):
         patch.stopall()
