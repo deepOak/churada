@@ -8,9 +8,7 @@ import __builtin__
 import os.path
 import shutil
 
-from churada.core import LocalTorrent
-from churada.core import LocalTorrentError
-#import logging
+from churada.torrent import LocalTorrent,LocalTorrentError
 
 tfile_1 = """d8:announce21:http://www.tracker.ca13:announce-listll10:announce-110:announce-2ee13:creation datei10000e7:comment4:blah10:created by7:creator4:infod4:name15:single_file.ext6:lengthi100e12:piece lengthi1000e6:pieces20:123456789012345678907:privatei1eee"""
 

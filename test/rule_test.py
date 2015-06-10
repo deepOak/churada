@@ -2,23 +2,22 @@ import unittest
 from nose_parameterized import parameterized
 from mock import MagicMock
 
-from mock_generators import ltor_gen,rtor_gen
-from churada.core import Rule
-from churada.core import CompositeRule
+from generators import ltor_gen,rtor_gen
+from churada.rule import Rule,CompositeRule
 
 rtor_test = [rtor_gen(name=str(i),state=2*str(i),size=i) for i in range(0,10)]
 ltor_test = [ltor_gen(name=str(i),path=2*str(i),size=i) for i in range(0,10)]
-
 class RuleTest(unittest.TestCase):
     @parameterized.expand([
-        ("query_1",rtor_test[0],{'key':'name','func':lambda x: x == '0'},True),
-        ("query_2",rtor_test[1],{'key':'name','func':lambda x: int(x) == 1},True),
-        ("query_3",rtor_test[2],{'key':'size','func':lambda x: x == 2},True),
-        ("query_4",rtor_test[3],{'key':'state','func':lambda x: x == '33'},True),
-        ("query_5",rtor_test[4],{'key':'size','func':lambda x: x < 2},False),
-        ("query_6",ltor_test[0],{'key':'name','func':lambda x: int(x) == 0},True),
-        ("query_7",ltor_test[1],{'key':'path','func':lambda x: x == '11'},True),
-        ("query_8",ltor_test[2],{'key':'size','func':lambda x: x < 2},False)
+        ("query_true_0",rtor_test[0],{'key':'name','func':lambda x: x == '0'},True),
+        ("query_true_1",rtor_test[1],{'key':'name','func':lambda x: int(x) == 1},True),
+        ("query_true_2",rtor_test[2],{'key':'size','func':lambda x: x == 2},True),
+        ("query_true_3",rtor_test[3],{'key':'state','func':lambda x: x == '33'},True),
+        ("query_true_4",ltor_test[0],{'key':'name','func':lambda x: int(x) == 0},True),
+        ("query_true_5",ltor_test[1],{'key':'path','func':lambda x: x == '11'},True),
+        ("query_false_0",rtor_test[4],{'key':'size','func':lambda x: x < 2},False),
+        ("query_false_1",ltor_test[2],{'key':'size','func':lambda x: x < 2},False),
+        ("query_false_2",ltor_test[3],{'key':'state','func':lambda: True},False)
         ])
     def query_test(self,_,obj,func_args,query_flag):
         rule = Rule(**func_args)

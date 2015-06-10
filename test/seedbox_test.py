@@ -3,7 +3,8 @@ from nose_parameterized import parameterized
 from mock import MagicMock
 from mock import patch
 
-from churada.core import Seedbox
+from churada.seedbox import Seedbox
+from churada.rule import Rule,CompositeRule
 from generators import ltor_gen,rtor_gen
 
 ltor_test = [ltor_gen(name=str(i),path=str(i),size=i) for i in range(0,5)]
@@ -19,14 +20,23 @@ info_list = [rtor_elem] + [rtor_gen(name=str(i),state=str(i),size=i) for i in ra
 size = 185
 paths = ("remote_torrent","remote_data","local_data")
 # download valid, download path, delete valid
-rules = {'download_valid':[],'download_path':[],'delete_valid':[]}
-#rules = ([[('name',lambda x: x != 'invalid_download_1'),('size',lambda x: x < 50)],
-#           ('name',lambda x: x != 'invalid_download_2')], # r_download_valid
-#           [(('name',lambda x: x == 'download_to_rule_path'),'rule_path',10)], #r_download_path
-#           [('name',lambda x: x != 'do_not_delete')])
+
+rule_list = {'name_not_invalid':Rule('name',lambda x: x != 'invalid'),
+             'size_lt_50':Rule('size',lambda x: x < 50),
+             'state_seeding':Rule('state',lambda x: x != 'NotSeeding')
+             }
+
+valid_rule = CompositeRule([rule for key,rule in rule_list.items()],lambda x,y,z: x and y and z)
+
+# dummy rules - could be empty entries in dict
+rules = {'download_valid':[valid_rule],
+        'download_path':[(valid_rule,'/high_prio',40),(valid_rule,'/low_prio',30)],
+        'delete_valid':[valid_rule]}
+
 capacity = 200
 uname = 'uname'
 host = 'host'
+
 #rtor_download_valid_1 = rtor_gen(name='invalid_download_1',state='Seeding',size=60)
 #rtor_download_valid_2 = rtor_gen(name='invalid_download_2',state='Seeding',size=40)
 #rtor_download_valid_3 = rtor_gen(name='invalid_download_1',state='Seeding',size=40)
