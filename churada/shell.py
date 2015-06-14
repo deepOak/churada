@@ -1,4 +1,4 @@
-import paramiko, subprocess, logging
+import paramiko, subprocess, logging, select
 
 class Shell:
     """ 
@@ -38,7 +38,7 @@ class Shell:
                 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 client.connect(self.host,username=self.uname)
                 self.__client = client
-                self.logger.debug("Connected: %s" %(self.path))
+                self.logger.debug("connect: %s" %(self.path))
                 return 
             except paramiko.ssh_exception.SSHException as e:
                 if i == 0:
@@ -49,8 +49,8 @@ class Shell:
             self.__client.close()
             self.__client = None
     def __shell_command(self,command):
-        command = re.split(" ",command)
-        self.logger.debug("Command: (%s) %s",self,command)
+#        command = re.split(" ",command)
+        self.logger.debug("shell command: (%s) %s",self,command)
         try:
             output = subprocess.check_output(command)
             exitcode = 0
@@ -61,7 +61,7 @@ class Shell:
     def __ssh_command(self,command):
         if not self.path:
             return
-        self.logger.debug("Command: (%s) %s",self,command)
+        self.logger.debug("ssh command: (%s) %s",self,command)
         stdin,stdout,stderr = self.__client.exec_command(command)
         output = ""
         while not stdout.channel.exit_status_ready():
@@ -81,8 +81,9 @@ class Shell:
     def add_shell(self,command,func,args):
         self.shell_queue.append( (command,func,args) )
     def do_ssh(self):
-        if not self.path or self.__doing_ssh:
+        if not self.path or not self.ssh_queue or self.__doing_ssh:
             return
+        self.logger.debug("start ssh queue")
         self.__processing_ssh = True
         self.__connect()
         if self.__client:
@@ -97,12 +98,12 @@ class Shell:
                 func(**args) #,data=output)
             self.__disconnect()
             self.ssh_queue = []
+        self.logger.debug("stop ssh queue")
         self.__doing_ssh = False
-        #for command,func in self.ssh_queue:
     def do_shell(self):
-        # try CalledProcessError for nonzero exit code
-        if self.__doing_shell:
+        if not self.shell_queue or self.__doing_shell:
             return
+        self.logger.debug("start shell queue")
         self.__processing_shell = True
         for command,func,args in self.shell_queue:
             data = None
@@ -114,5 +115,6 @@ class Shell:
             args['output'] = output
             func(**args) #data = output
         self.shell_queue = []
+        self.logger.debug("stop shell queue")
         self.__doing_shell = False
 

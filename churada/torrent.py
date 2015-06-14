@@ -12,7 +12,6 @@ class RemoteTorrent:
 
     RemoteTorrent instances are meant to be wrappers for parsed deluge-console records
     """
-    # names are unique identifiers
     __record_pattern = ("Name: (?P<name>.+)\s*\n"
               "ID: (?P<id>[0-9a-f]+)\s*\n"
               "State: (?P<state>[\w]+)( Down Speed: (?P<dspeed>\d+)?/s)?( Up Speed: (?P<uspeed>\d+)/s)?( ETA: (?P<eta>[\d\w ]+))?\s*\n"
@@ -36,17 +35,15 @@ class RemoteTorrent:
         self.logger = logging.getLogger("RemoteTorrent")
         self.time = timestamp
         self.__parse(info)
+        self.logger.debug("init: %s" %(self))
     def __ne__(self,other):
         return self.name != other.name
     # a non-zero state implies a successful query: that torrent is present on the remote server and data is parsed correctly
+    # non-zero records throw errors upon creation
     def __nonzero__(self):
         return bool(self.state) and bool(self.name)
     def __repr__(self):
-        return "<rtor %s, %s>" %(self.name,self.state)
-#        return self.name
-    # defined for testing purposes
-    def __reduce__(self):
-        pass
+        return "<rtor %.20s, %s>" %(self.name,self.state)
     @classmethod
     def __size_convert(cls,matchobj):
         return str(int( float(matchobj.group(1)) * cls.__size_dict[matchobj.group(2)] ))
@@ -62,8 +59,7 @@ class RemoteTorrent:
         info = re.sub(self.__time_pattern, self.__time_convert, info)
         matchobj = re.search(self.__record_pattern,info)
         if not matchobj:
-            raise RemoteTorrentError("No data present")
-
+            raise RemoteTorrentError("init error: no data matches pattern")
         info_dict = matchobj.groupdict()
         for key in info_dict:
             if key != 'name' and key != 'state':
@@ -77,17 +73,14 @@ class RemoteTorrent:
 #            info_dict['state'] = None
         self.__dict__.update(info_dict)
         if not self:
-            raise RemoteTorrentError("init error: torrent has no record")
+            raise RemoteTorrentError("init error: zero record")
     @classmethod
     def batch_parse(cls,info,timestamp):
         info = re.sub(cls.__size_pattern, cls.__size_convert, info)
         info = re.sub(cls.__time_pattern, cls.__time_convert, info)   
         info_iter = re.finditer(cls.__record_pattern,info)
         batch = [RemoteTorrent(match.group(),timestamp) for match in info_iter]
-        batch.sort(key=lambda rtor: rtor.score)
         return batch
-#    def query(self,key,func):
-#        return key in self.__dict__ and func(self.__dict__[key])
 
 class LocalTorrentError(Exception):
     pass
@@ -121,7 +114,7 @@ class LocalTorrent:
         self.time = time.time()
         self.size = os.path.getsize(self.path)
         self.__parse()
-        # log: created ltor
+        self.logger.debug("init: %s" %(self))
     def __ne__(self,other):
         return self.name != other.name and self.path != other.path
     # need both name and path to be nonzero
@@ -131,7 +124,7 @@ class LocalTorrent:
     def __reduce__(self):
         pass
     def __repr__(self):
-        return "<%s,%s>" %(self.name,self.path)
+        return "<%.20s,%s>" %(self.name,os.path.dirname(self.path))
     # tokenize and parse_bencode both from Fredrik Lundh:
     # August 2007 (effbot.org/zone/bencode.htm)
     @classmethod
@@ -201,13 +194,9 @@ class LocalTorrent:
         if os.path.isdir(dest):
             filename = os.path.basename(self.path)
             dest = os.path.join(dest,filename)
-        #if not os.path.isdir(os.path.dirname(dest)):
-        #    raise LocalTorrentError("move error: no valid directory in path: %s"%(self.path))
         self.last_path = self.path
         shutil.move(self.path,dest)
         self.path = dest
+        self.logger.debug("move: %s <- %s" %(self,os.path.dirname(self.last_path)))
         # log: moved file
-#    def query(self,key,func):
-#        return key in self.__dict__ and func(self.__dict__[key])
-        # log: query, result
 

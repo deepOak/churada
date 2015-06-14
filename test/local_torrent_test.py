@@ -10,7 +10,10 @@ import shutil
 
 from churada.torrent import LocalTorrent,LocalTorrentError
 
-tfile_1 = """d8:announce21:http://www.tracker.ca13:announce-listll10:announce-110:announce-2ee13:creation datei10000e7:comment4:blah10:created by7:creator4:infod4:name15:single_file.ext6:lengthi100e12:piece lengthi1000e6:pieces20:123456789012345678907:privatei1eee"""
+tfile_1 = ("d8:announce21:http://www.tracker.ca13:announce-listll10:announce"
+"-110:announce-2ee13:creation datei10000e7:comment4:blah10:created by7:creator4:in"
+"fod4:name15:single_file.ext6:lengthi100e12:piece lengthi1000e6:pieces20:1234567"
+"89012345678907:privatei1eee")
 
 tfile_1_dict = {'announce':'http://www.tracker.ca',
                      'announce-list':[['announce-1','announce-2']],
@@ -26,8 +29,12 @@ tfile_1_dict = {'announce':'http://www.tracker.ca',
                }
 
 
-tfile_2 = """d8:announce21:http://www.tracker.us13:announce-listll10:announce-310:announce-4ee13:creation datei1234e7:comment3:ayy10:created by3:idk4:infod4:name15:other_file.ext26:lengthi1024e12:piece lengthi12345e6:pieces40:12345678901234567890abcdefghijklmnopqrst7:privatei1eee"""
+tfile_2 = ("d8:announce21:http://www.tracker.us13:announce-listll10:announce-3"
+"10:announce-4ee13:creation datei1234e7:comment3:ayy10:created by3:idk4:infod4:n"
+"ame15:other_file.ext26:lengthi1024e12:piece lengthi12345e6:pieces40:12345678901"
+"234567890abcdefghijklmnopqrst7:privatei1eee")
  
+
 tfile_2_dict = {'announce':'http://www.tracker.us',
                 'announce-list':[['announce-3','announce-4']],
                 'creation date':1234,
@@ -42,7 +49,11 @@ tfile_2_dict = {'announce':'http://www.tracker.us',
                }
 
                     
-tfile_3 = """d8:announce21:http://www.tracker.en13:announce-listll10:announce-510:announce-6ee13:creation datei3456e7:comment4:lmao4:infod4:name14:data_directory12:piece lengthi123e6:pieces60:0123456789012345678901234567890123456789012345678901234567897:privatei0e5:filesld6:lengthi2000e4:pathl7:subdir17:subdir25:file1eed6:lengthi3200e4:pathl7:subdir17:subdir35:file2eeeee"""
+tfile_3 = ("d8:announce21:http://www.tracker.en13:announce-listll10:announce-5"
+"10:announce-6ee13:creation datei3456e7:comment4:lmao4:infod4:name14:data_direct"
+"ory12:piece lengthi123e6:pieces60:012345678901234567890123456789012345678901234"
+"5678901234567897:privatei0e5:filesld6:lengthi2000e4:pathl7:subdir17:subdir25:fi"
+"le1eed6:lengthi3200e4:pathl7:subdir17:subdir35:file2eeeee")
 
 tfile_3_dict = {'announce':'http://www.tracker.en',
                 'announce-list':[['announce-5','announce-6']],
@@ -130,38 +141,26 @@ class LocalTorrentTest(unittest.TestCase):
         with patch("__builtin__.open", mock_open(read_data=tfile)) as m:
             ltor = LocalTorrent(path)
         self.assertEqual(ltor.__nonzero__(),nonzero_flag)
-#    @parameterized.expand(
-#      [("lambda_1",tfile_1,'/path',{'key':'size','func':lambda x: x > 3},True),
-#       ("lambda_2",tfile_1,'/path',{'key':'size','func':lambda x: x < 3},False),
-#       ("lambda_3",tfile_1,'/path',{'key':'announce','func':lambda x: x == 'http://www.tracker.ca'},True),
-#       ("regex_1",tfile_1,'/unique',{'key':'path','func':lambda x: bool(re.search('que',x))},True),
-#       ("regex_2",tfile_2,'/path',{'key':'announce','func':lambda x: bool(re.search('ca',x))},False),
-#       ("regex_3",tfile_3,'/path',{'key':'comment','func':lambda x: bool(re.match('lmao',x))},True)])
-#    def query_test(self,_,tfile,path,func_args,query_flag):
-#        with patch("__builtin__.open", mock_open(read_data=tfile)) as m:
-#            ltor = LocalTorrent(path)
-#        result = ltor.query(**func_args)
-#        self.assertEqual(result,query_flag)
-#    @parameterized.expand(
-#            [("is_dir",tfile_1,("/dir2/dest","/dir2/dest/%s"%(name)),{'isdir':True,'collision':False,'move_flag':True}),
-#             ("not_abs",tfile_1,("dir2/dest",None),{'isdir':True,'collision':False,'move_flag':False}),
-#             ("collision_1",tfile_1,("/dir2/dest/","/dir2/dest/%s"%(name)),{'isdir':True,'collision':True,'move_flag':True}),
-#             ("collision_2",tfile_1,("/dir2/dest/file.f","/dir2/dest/file.f"),{'isdir':False,'collision':True,'move_flag':True}) ])
-#    def move_test(self,_,tfile,paths,flags):
-#        path = "/dir1/path.e"
-#        dest,path_ = paths
-#        with patch("__builtin__.open", mock_open(read_data=tfile)) as m:
-#            ltor = LocalTorrent(path)
-#        self.mock_isdir.return_value = flags['isdir']
-#        self.mock_exists.return_value = flags['collision']
-#        with patch('shutil.move') as mock_move:
-#            if flags['move_flag']:
-#                ltor.move(dest)
-#                mock_move.assert_called_once_with(path,path_)
-#                self.assertEquals(ltor.path,path_)
-#            else:
-#                self.assertRaises(LocalTorrentError,lambda: ltor.move(dest))
-#                self.assertEqual(mock_move.called,False)
-#                self.assertEqual(ltor.path,path)
+    @parameterized.expand(
+            [("is_dir",tfile_1,("/dir2/dest","/dir2/dest/%s"%(name)),{'isdir':True,'collision':False,'move_flag':True}),
+             ("not_abs",tfile_1,("dir2/dest",None),{'isdir':True,'collision':False,'move_flag':False}),
+             ("collision_1",tfile_1,("/dir2/dest/","/dir2/dest/%s"%(name)),{'isdir':True,'collision':True,'move_flag':True}),
+             ("collision_2",tfile_1,("/dir2/dest/file.f","/dir2/dest/file.f"),{'isdir':False,'collision':True,'move_flag':True}) ])
+    def move_test(self,_,tfile,paths,flags):
+        path = "/dir1/path.e"
+        dest,path_ = paths
+        with patch("__builtin__.open", mock_open(read_data=tfile)) as m:
+            ltor = LocalTorrent(path)
+        self.mock_isdir.return_value = flags['isdir']
+        self.mock_exists.return_value = flags['collision']
+        with patch('shutil.move') as mock_move:
+            if flags['move_flag']:
+                ltor.move(dest)
+                mock_move.assert_called_once_with(path,path_)
+                self.assertEquals(ltor.path,path_)
+            else:
+                self.assertRaises(LocalTorrentError,lambda: ltor.move(dest))
+                self.assertEqual(mock_move.called,False)
+                self.assertEqual(ltor.path,path)
     def tearDown(self):
         patch.stopall()

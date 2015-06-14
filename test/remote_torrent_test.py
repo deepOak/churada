@@ -221,14 +221,3 @@ class RemoteTorrentTest(unittest.TestCase):
     def nonzero_test(self,_,info,nonzero_flag):
         rtor = RemoteTorrent(info,timestamp)
         self.assertEqual(bool(rtor),nonzero_flag)
-#    @parameterized.expand(
-#      [("lambda_1",info_downloading,{'key':'tpeer','func':lambda x: x > 3},True),
-#       ("lambda_2",info_downloading,{'key':'tpeer','func':lambda x: x < 3},False),
-#       ("lambda_3",info_downloading,{'key':'tracker','func':lambda x: x == 'tracker.ca'},True),
-#       ("regex_1",info_downloading,{'key':'tracker','func':lambda x: bool(re.search('tracker',x))},True),
-#       ("regex_2",info_downloading,{'key':'tracker','func':lambda x: bool(re.search('ca',x))},True),
-#       ("regex_3",info_downloading,{'key':'tracker','func':lambda x: bool(re.search('what',x))},False)]
-#       )
-#    def query_test(self,_,info,func_args,query_flag):
-#        rtor = RemoteTorrent(info,timestamp)
-#        self.assertEquals(rtor.query(**func_args),query_flag)

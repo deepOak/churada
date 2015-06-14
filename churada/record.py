@@ -31,10 +31,10 @@ class LocalRecord:
     # ltor > path
     def ltor_add(self,ltor=None,path=None,pos=None):
         if ltor and ltor not in self.record:
-            if pos and pos in range(0,len(self.record)+1):
-                self.record.insert(pos,ltor)
-            else:
-                self.record.append(ltor)
+            if pos not in range(0,len(self.record)+1):
+                pos = len(self.record)
+            self.record.insert(pos,ltor)
+            self.logger.debug("ltor_add: add %s" %(ltor))
         elif path:
             ltor = LocalTorrent(path)
             self.ltor_add(pos=pos,ltor=ltor)
@@ -42,6 +42,7 @@ class LocalRecord:
     def ltor_del(self,ltor=None,name=None,path=None):
         if ltor and ltor in self.record:
             self.record.remove(ltor)
+            self.logger.debug("ltor_del: delete %s"%(ltor))
         elif name:
             self.ltor_del(ltor=self.ltor_find(name=name))
         elif path:
@@ -66,6 +67,7 @@ class LocalRecord:
 #            self.ltor_add(ltor=ltor_new,pos=index)
     def ltor_sort(self,key=lambda ltor: ltor.size):
         self.record.sort(key=key)
+        self.logger("ltor_sort: sorting")
 
 class RemoteRecord:
     def __init__(self,shell):
@@ -81,10 +83,10 @@ class RemoteRecord:
     def __rtor_add(self,data,pos=None):
         rtor = RemoteTorrent(time.time(),data)
         if rtor not in self.record:
-            if pos:
-                self.record.insert(pos,rtor)
-            else:
-                self.record.append(rtor)
+            if pos not in range(0,len(self.record)+1):
+                pos = len(self.record)
+            self.record.insert(pos,rtor)
+            self.logger.debug("rtor_add: add %s" %(rtor))
     # rtor > name
     def rtor_add(self,rtor=None,name=None,pos=None):
         if rtor and rtor not in self.record:
@@ -97,6 +99,7 @@ class RemoteRecord:
     def rtor_del(self,rtor=None,name=None):
         if rtor and rtor in self.record:
             self.record.remove(rtor)
+            self.logger.debug("rtro_del: delete %s" %(rtor))
         elif name:
             self.rtor_del(rtor=self.rtor_find(name=name))
     def rtor_find(self,rtor=None,name=None):
@@ -106,10 +109,13 @@ class RemoteRecord:
         elif name:
             result = next((e for e in self.record if e.name == name),None)
         return result
-    def rtor_update(self,rtor=None,name=None):
-        result = self.rtor_find(rtor=rtor,name=name)
-        if result:
-            index = self.record.index(result)
-            self.rtor_del(rtor=result)
-            self.rtor_add(name=result.name,pos=index)
+    def rtor_sort(self,key=lambda rtor: rtor.score):
+        self.record.sort(key=key)
+        self.logger.debug("rtor_sort: sorting")
+#    def rtor_update(self,rtor=None,name=None):
+#        result = self.rtor_find(rtor=rtor,name=name)
+#        if result:
+#            index = self.record.index(result)
+#            self.rtor_del(rtor=result)
+#            self.rtor_add(name=result.name,pos=index)
 

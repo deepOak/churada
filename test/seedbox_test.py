@@ -18,7 +18,10 @@ down_list = [rtor_gen(name=str(i),state=str(i),size=i) for i in range(10,5,-1)]
 up_list = [ltor_gen(name=str(i),path="/"+str(i),size=i) for i in range(10,5,-1)]
 info_list = [rtor_elem] + [rtor_gen(name=str(i),state=str(i),size=i) for i in range(20,5,-1)]
 size = 185
-paths = ("remote_torrent","remote_data","local_data")
+paths = {'remote_torrent':"remote_torrent",
+         'remote_data':"remote_data",
+         'local_data':"local_data"}
+
 # download valid, download path, delete valid
 
 rule_list = {'name_not_invalid':Rule('name',lambda x: x != 'invalid'),

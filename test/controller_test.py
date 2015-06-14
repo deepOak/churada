@@ -15,7 +15,7 @@ seedbox_list = [
         seedbox_gen(10,5,5),
         seedbox_gen(100,3,10)]
 
-paths = {'watchlist':["/dir/lwatch1","/dir/lwatch2","/dir/lwatch3","/dir/lwatch4"],
+paths = {'local_watch':["/dir/lwatch1","/dir/lwatch2","/dir/lwatch3","/dir/lwatch4"],
          'local_torrent':"/dir/ltor",
          'local_invalid':"/dir/linv"}
 

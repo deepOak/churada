@@ -16,9 +16,6 @@ class RemoteRecordTest(unittest.TestCase):
         self.rrec = RemoteRecord(self.shell)
     @parameterized.expand(
        [("empty_args",rtor_test,{},False,False),
-#        ("empty_obj_1",rtor_test,{'rtor':rtor_gen(name='empty_rtor',state='')},False,False),
-#        ("empty_obj_2",rtor_test,{'rtor':rtor_gen(name='',state='empty_rtor')},False,False),
-#        ("empty_name",rtor_test,{'name':''},False,False),
         ("present_obj",rtor_test,{'rtor':rtor_gen(name='1',state='state')},False,False),
         ("present_name",rtor_test,{'name':'1'},False,False),
         ("absent_obj",rtor_test,{'rtor':rtor_elem},False,True),
@@ -42,9 +39,6 @@ class RemoteRecordTest(unittest.TestCase):
         self.assertEqual(control,self.rrec.record)
     @parameterized.expand(
        [("empty_args",rtor_test,{},[],False),
-#        ("empty_obj_1",rtor_test,{'rtor':rtor_gen(name='empty_rtor',state='')},[],False),
-#        ("empty_obj_2",rtor_test,{'rtor':rtor_gen(name='',state='empty_rtor')},[],False),
-#        ("empty_name",rtor_test,{'name':''},[],False),
         ("present_obj",rtor_test,{'rtor':rtor_elem},[3,rtor_elem],True),
         ("present_name",rtor_test,{'name':'5'},[3,rtor_elem],True),
         ("absent_obj",rtor_test,{'rtor':rtor_elem},[],False),
@@ -59,9 +53,6 @@ class RemoteRecordTest(unittest.TestCase):
         self.assertEqual(self.rrec.record,control)
     @parameterized.expand(
        [("empty_args",rtor_test,{},None),
-#        ("empty_name",rtor_test,{'name':''},None),
-#        ("empty_obj_1",rtor_test,{'rtor':rtor_gen(name='1',state='')},None),
-#        ("empty_obj_2",rtor_test,{'rtor':rtor_gen(name='',state='1')},None),
         ("present_obj",rtor_test,{'rtor':rtor_test[2]},rtor_test[2]),
         ("present_name",rtor_test,{'name':'2'},rtor_test[2]),
         ("equal_obj",rtor_test,{'rtor':rtor_gen(name='2',state='not2')},rtor_test[2]),
@@ -73,27 +64,25 @@ class RemoteRecordTest(unittest.TestCase):
         self.rrec.record = control[:]
         result = self.rrec.rtor_find(**func_args)
         self.assertEqual(result,return_value)
-    @parameterized.expand(
-       [("empty_args",rtor_test,{},None,False),
-#        ("empty_obj_1",rtor_test,{'rtor':rtor_gen(name='1',state='')},None,False),
-#        ("empty_obj_2",rtor_test,{'rtor':rtor_gen(name='',state='1')},None,False),
-        ("present_obj",rtor_test,{'rtor':rtor_test[1]},1,True),
-        ("present_name",rtor_test,{'name':'1'},1,True),
-        ("absent_obj",rtor_test,{'rtor':rtor_elem},None,False),
-        ("absent_name",rtor_test,{'name':'5'},None,False),
-        ("arg_priority",rtor_test,{'rtor':rtor_test[1],'name':'2'},1,True)] 
-       )
-    def rtor_update_test(self,_,control,func_args,index,del_flag):
-        self.rrec.rtor_add = MagicMock()
-        control = control[:]
-        self.rrec.record = control[:]
-        self.rrec.rtor_update(**func_args)
-        if del_flag:
-            result = control[index]
-            del control[index]
-            self.rrec.rtor_add.assert_called_once_with(name=result.name,pos=index)
-        else:
-            self.assertEqual(self.rrec.rtor_add.called,False)
-        self.assertEqual(control,self.rrec.record)
+#    @parameterized.expand(
+#       [("empty_args",rtor_test,{},None,False),
+#        ("present_obj",rtor_test,{'rtor':rtor_test[1]},1,True),
+#        ("present_name",rtor_test,{'name':'1'},1,True),
+#        ("absent_obj",rtor_test,{'rtor':rtor_elem},None,False),
+#        ("absent_name",rtor_test,{'name':'5'},None,False),
+#        ("arg_priority",rtor_test,{'rtor':rtor_test[1],'name':'2'},1,True)] 
+#       )
+#    def rtor_update_test(self,_,control,func_args,index,del_flag):
+#        self.rrec.rtor_add = MagicMock()
+#        control = control[:]
+#        self.rrec.record = control[:]
+#        self.rrec.rtor_update(**func_args)
+#        if del_flag:
+#            result = control[index]
+#            del control[index]
+#            self.rrec.rtor_add.assert_called_once_with(name=result.name,pos=index)
+#        else:
+#            self.assertEqual(self.rrec.rtor_add.called,False)
+#        self.assertEqual(control,self.rrec.record)
 
 
